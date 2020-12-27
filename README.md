@@ -12,11 +12,13 @@ On Linux, that's :
 
 # Steps to load your mesh 
 
-Your mesh must be vertex colored for the plugin to work, and triangulated before export (Use & apply a triangulate modifier)
+  1. You must first triangulate your mesh (manually or via the modifier).
+  2. When your model is ready, you can then vertex paint it. If you don't, the vertices colors will default to white.
+  * If you modify your geometry *after* vertex painting, the plugin will faile to export the mesh. This is because the vertex color data is set to 0 each time you modify your geometry.
+  
+Get the example code by Lameguy64 from [here](http://psx.arthus.net/code/primdraw.7z)
 
-Get the example by Lameguy64 from [here](http://psx.arthus.net/code/primdraw.7z)
-
-Edit the file to reflect the values in your exported .c file :
+## Edit the file to reflect the values in your exported .c file :
 
 For example, if you export the start cube after vertex painting and triangulation :
 
