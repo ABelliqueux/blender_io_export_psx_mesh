@@ -13,16 +13,26 @@ On Linux, that's :
 # Steps to load your mesh 
 
   1. You must first triangulate your mesh (manually or via the modifier).
-  
-  * Your geometry must not exceed 460 triangles, or it won't load properly.
-  
+    
   2. When your model is ready, you can then vertex paint it. If you don't, the vertices colors will default to white.
   
   * If you modify your geometry *after* vertex painting, the plugin will faile to export the mesh. This is because the vertex color data is set to 0 each time you modify your geometry.
   
   3. Get the example code by Lameguy64 from [here](http://psx.arthus.net/code/primdraw.7z)
 
-  4. Edit the `primdraw.c` file to reflect the values in your exported .c file :
+  4. Edit the `primdraw.c` file 
+  
+  * lines 29 and 30 to reflect the number of tris you want to be able to draw 
+  
+```c
+#define OT_LENGTH	2048	// Maximum number of OT entries
+#define MAX_PRIMS	1024	// Maximum number of POLY_FT3 primitives
+```
+seem to be safe values.
+  
+  
+  
+  * to reflect the values in your exported .c file :
 
 For example, if you export the start cube after vertex painting and triangulation :
 
