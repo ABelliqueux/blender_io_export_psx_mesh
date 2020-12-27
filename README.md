@@ -1,3 +1,5 @@
+![Pic or it didn't happen](primdrawG.jpg)
+
 # blender_io_export_psx_tmesh
 
 Blender <= 2.79c plugin to export a gouraud shaded PSX mesh to a C file.
