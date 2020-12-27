@@ -20,7 +20,7 @@ On Linux, that's :
   
   3. Get the example code by Lameguy64 from [here](http://psx.arthus.net/code/primdraw.7z)
 
-  4. Edit the file to reflect the values in your exported .c file :
+  4. Edit the `primdraw.c` file to reflect the values in your exported .c file :
 
 For example, if you export the start cube after vertex painting and triangulation :
 
