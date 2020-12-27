@@ -1,6 +1,27 @@
 # blender_io_export_psx_mesh
 
-Blender <= 2.79c plugin to export a PSX mesh to an array in a C file.
+Blender <= 2.79c plugin to export a PSX mesh to a C file.
+
+Specifically, it generates a C file containing :
+
+  * an array of SVECTOR containing the vertices coordinates
+  * an array of SVECTOR containing the normals
+  * an array of CVECTOR containg the color of each vertex
+  * an array of int that describe the relation between the tri meshes
+  * a TMESH struct to ease access to those arrays
+
+From `libgte.h`  :
+
+```c
+typedef struct {
+        SVECTOR         *v;                     /*shared vertices*/
+        SVECTOR         *n;                     /*shared normals*/
+        SVECTOR         *u;                     /*shared texture addresses*/
+        CVECTOR         *c;                     /*shared colors*/
+        u_long          len;                    /*mesh length(=#vertex)*/
+} TMESH;
+
+```
 
 # Install
 
