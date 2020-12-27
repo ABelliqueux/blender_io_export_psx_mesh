@@ -4,7 +4,7 @@ import bpy
 bl_info = {
     "name":         "PSX mesh",
     "author":       "TheDukeOfZill",
-    "blender":      (2,6,9),
+    "blender":      (2,7,9),
     "version":      (0,0,1),
     "location":     "File > Import-Export",
     "description":  "Export psx data format",
@@ -45,11 +45,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
  
             f.write("CVECTOR "+"model"+m.name+"_color[] = {\n")
             for i in range(len(m.polygons)):
-                colors = m.vertex_colors["Col"].data
-                f.write("\t"+str(int(colors[i*3].color.r*255))+","+str(int(colors[i*3].color.g*255))+","+str(int(colors[i*3].color.b*255))+", 0")
-                if i != len(m.polygons) - 1:
-                    f.write(",")
-                f.write("\n")
+                if len(m.vertex_colors) != 0:           # if vertex_colors exist, write them
+                    colors = m.vertex_colors["Col"].data
+                    f.write("\t"+str(int(colors[i*3].color.r*255))+","+str(int(colors[i*3].color.g*255))+","+str(int(colors[i*3].color.b*255))+", 0")
+                    if i != len(m.polygons) - 1:
+                        f.write(",")
+                    f.write("\n")
+                else:                                   # if none is defined, default to white
+                    f.write("\t255,255,255,0")
+                    if i != len(m.polygons) - 1:
+                        f.write(",")
+                    f.write("\n")
             f.write("};\n\n")
  
             f.write("int "+"model"+m.name+"_index[] = {\n")
