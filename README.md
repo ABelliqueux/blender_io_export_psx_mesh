@@ -14,6 +14,8 @@ On Linux, that's :
 
   1. You must first triangulate your mesh (manually or via the modifier).
   
+  * Your geometry must not exceed 460 triangles, or it won't load properly.
+  
   2. When your model is ready, you can then vertex paint it. If you don't, the vertices colors will default to white.
   
   * If you modify your geometry *after* vertex painting, the plugin will faile to export the mesh. This is because the vertex color data is set to 0 each time you modify your geometry.
