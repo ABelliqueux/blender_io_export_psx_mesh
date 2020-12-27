@@ -41,11 +41,11 @@ On Linux, that's :
   
   * If you modify your geometry *after* vertex painting, the plugin will faile to export the mesh. This is because the vertex color data is set to 0 each time you modify your geometry.
 
-  3. If needed, edit the `primdraw.c` file , lines 29 and 30,  to reflect the number of tris you want to be able to draw ( ~750 in NTSC, ~910 in PAL )
+  3. If needed, edit the `primdraw.c` file , lines 29 and 30,  to reflect the number of tris you want to be able to draw ( Max seems to be ~750 in NTSC, ~910 in PAL )
   
 ```c
 #define OT_LENGTH	2048	// Maximum number of OT entries
-#define MAX_PRIMS	1024	// Maximum number of POLY_GT3 primitives, should be equal to at least your # of tris * 3 
+#define MAX_PRIMS	1024	// Maximum number of POLY_GT3 primitives
 ```
 seem to be safe values.
 
