@@ -23,7 +23,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     def execute(self, context):
         
         # Leave edit mode to avoid errors
-        bpy.ops.object.editmode_toggle()
+        bpy.ops.object.mode_set(mode='OBJECT')
                  
         scale = 20
         f = open(os.path.normpath(self.filepath),"w+")
