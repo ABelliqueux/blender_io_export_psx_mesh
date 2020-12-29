@@ -8,6 +8,7 @@ Specifically, it generates a C file containing :
 
   * an array of SVECTOR containing the vertices coordinates
   * an array of SVECTOR containing the normals
+  * an array of SVECTOR containing the UV coordinates of the texture
   * an array of CVECTOR containing the color of each vertex
   * an array of int that describe the relation between the tri meshes
   * a TMESH struct to ease access to those arrays
