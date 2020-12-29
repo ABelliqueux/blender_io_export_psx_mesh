@@ -2,7 +2,7 @@
 
 # blender_io_export_psx_tmesh
 
-Blender <= 2.79c plugin to export a gouraud shaded PSX mesh to a C file.
+Blender <= 2.79c plugin to export a gouraud shaded, UV textured PSX mesh to a C file.
 
 Specifically, it generates a C file containing :
 
@@ -11,6 +11,8 @@ Specifically, it generates a C file containing :
   * an array of CVECTOR containing the color of each vertex
   * an array of int that describe the relation between the tri meshes
   * a TMESH struct to ease access to those arrays
+  * declarations of the binary in memory
+  * a TIM_IMAGE struct ready to host the image data
 
 From `libgte.h`  :
 
@@ -22,7 +24,6 @@ typedef struct {
         CVECTOR         *c;                     /*shared colors*/
         u_long          len;                    /*mesh length(=#vertex)*/
 } TMESH;
-
 ```
 
 # Install the plugin
@@ -33,7 +34,7 @@ On Linux, that's :
 
 `~/.config/blender/2.79/scripts/addons`
 
-# Steps to load your mesh 
+# Steps to convert your mesh
 
   1. You must first triangulate your mesh (manually or via the modifier).
     
@@ -41,7 +42,10 @@ On Linux, that's :
   
   * If you modify your geometry *after* vertex painting, the plugin will faile to export the mesh. This is because the vertex color data is set to 0 each time you modify your geometry.
 
-  3. If needed, edit the `primdraw.c` file , lines 29 and 30,  to reflect the number of tris you want to be able to draw ( Max seems to be ~750 in NTSC, ~910 in PAL )
+  3. You can UV unwrap your model and apply a texture. The provided code will look for a tim file corresponding to the name of the image file you use in blender in the 'TIM' folder. 
+E.g : You use a 'cube.png' file in blender, the psx code will look for a 'cube.tim' file in ./TIM 
+
+  * If needed, edit the `primdraw.c` file , lines 29 and 30,  to reflect the number of tris you want to be able to draw ( Max seems to be ~750 in NTSC, ~910 in PAL )
   
 ```c
 #define OT_LENGTH	2048	// Maximum number of OT entries
@@ -53,7 +57,13 @@ seem to be safe values.
 
 The provided `Makefile`  uses the [Nugget+PsyQ setup](https://github.com/ABelliqueux/nolibgs_hello_worlds#setting-up-the-sdk--modern-gcc--psyq-aka-nuggetpsyq).
 
-Create a folder in `(...)/pcsx-redux/src/mips/`, put the `Makefile`, `cube.c` and `primdrawG.c` in it, then in a terminal, just type `make` to build the ps-exe.
+  1. Clone this repo in `(...)/pcsx-redux/src/mips/`
+  2. Enter the `blender_io_export_psx_mesh` folder
+  3. Install the plugin in blender, then open `cubetex.blend`
+  4. Export as 'cube.c'
+  5. Type `Make`
+
+You can use [img2tim](https://github.com/Lameguy64/img2tim) to convert your blender texture in a tim file.
 
 # Credits
 
