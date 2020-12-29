@@ -21,9 +21,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     filename_ext    = ".c";
     
     def execute(self, context):
+        
+        # Leave edit mode to avoid errors
+        bpy.ops.object.editmode_toggle()
+                 
         scale = 20
         f = open(os.path.normpath(self.filepath),"w+")
         for m in bpy.data.meshes:
+ 
+            # Write vertices vectors
  
             f.write("SVECTOR "+"model"+m.name+"_mesh[] = {\n")
             for i in range(len(m.vertices)):
@@ -33,6 +39,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     f.write(",")
                 f.write("\n")
             f.write("};\n\n")
+            
+            # Write normals vectors
  
             f.write("SVECTOR "+"model"+m.name+"_normal[] = {\n")
             for i in range(len(m.polygons)):
@@ -43,8 +51,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\n")
             f.write("};\n\n")
  
-            f.write("CVECTOR "+"model"+m.name+"_color[] = {\n")
+            # Write UVs vectors
+            # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
+            # bpy.context.active_object.data.uv_textures.active.data[0].image.name
+            # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath
+            # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath_from_user()
+            #
+            # get image size x, y
+            # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
+            # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
             
+            f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
+            texture_image = m.uv_textures[0].data[0].image
+            tex_width = texture_image.size[0]
+            tex_height = texture_image.size[1]
+            uv_layer = m.uv_layers[0].data
+            for i in range(len(uv_layer)):
+                u = uv_layer[i].uv
+                # psx UV coordinates are Top Left, while Blender is Bottom Left
+                f.write("\t"+str(u.x * tex_width)+","+str(tex_height - u.y * tex_height)+", 0, 0")
+                if i != len(uv_layer) - 1:
+                    f.write(",")
+                f.write("\n")
+            f.write("};\n\n")
+ 
+            # Write vertex colors vectors
+ 
+            f.write("CVECTOR "+"model"+m.name+"_color[] = {\n") 
             # If vertex colors exist, use them
             if len(m.vertex_colors) != 0:           
                 colors = m.vertex_colors["Col"].data
@@ -64,7 +97,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         f.write(",")
                     f.write("\n")
             f.write("};\n\n")
- 
+            
+            # Write polygons index
             f.write("int "+"model"+m.name+"_index[] = {\n")
             for i in range(len(m.polygons)):
                 poly = m.polygons[i]
@@ -74,15 +108,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\n")
             f.write("};\n\n")
  
-            
+            # Write TMESH struct
             f.write("TMESH "+"model"+m.name+" = {\n")
             f.write("\t"+"model"+m.name+"_mesh,\n")
             f.write("\t"+"model"+m.name+"_normal,\n")
-            f.write("\t0,\n")
+            f.write("\t"+"model"+m.name+"_uv,\n")
             f.write("\t"+"model"+m.name+"_color,\n")
+            
             # According to libgte.h, TMESH.len should be # of vertices. Meh...
             f.write("\t"+str(len(m.polygons))+"\n")
-            f.write("};\n")
+            f.write("};\n\n")
+            
+            # write texture binary name and declare TIM_IMAGE
+            # by default, load the file from the TIM folder
+            tex_name = texture_image.name
+            prefix   = str.partition(tex_name, ".")[0]
+            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+            f.write("TIM_IMAGE tim_" + prefix + ";\n")
+            
         f.close()
         return {'FINISHED'};
  

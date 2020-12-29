@@ -1,10 +1,9 @@
-
-TARGET = primdrawG
+TARGET = primdrawGT
 TYPE = ps-exe
 
-SRCS = primdrawG.c \
+SRCS = primdrawGT.c \
 ../common/crt0/crt0.s \
-#~ trisamp.c \
+TIM/cube.tim \
 
 CPPFLAGS += -I../psyq/include
 LDFLAGS += -L../psyq/lib
