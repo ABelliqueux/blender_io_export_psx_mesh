@@ -39,28 +39,31 @@
 // Sample vector model
 #include "cube.c"
 
-#define HI_RES		0		// 0: 320x240, 1: 640x480
-#define VMODE       1
-#define OT_LENGTH	2048	// Maximum number of OT entries
-#define MAX_PRIMS	1024	// Maximum number of POLY_GT3 primitives
+#define VMODE       0
 
-// Center screen coordinates
 #define SCREENXRES 320
 #define SCREENYRES 240
 
 #define CENTERX		SCREENXRES/2
 #define CENTERY		SCREENYRES/2
 
-// Display and draw environments
-DISPENV disp;
-DRAWENV draw;
+#define OTLEN	    2048	    // Maximum number of OT entries
+#define PRIMBUFFLEN	32768	    // Maximum number of POLY_GT3 primitives
 
-u_long	ot[2][OT_LENGTH];		// Ordering table (contains addresses to primitives)
-POLY_GT3	primbuff[2][MAX_PRIMS];	// Primitive list // That's our prim buffer
-int		primcnt=0;			    // Primitive counter
-int		db	= 0;                // Current buffer counter
+// Display and draw environments, double buffered
+DISPENV disp[2];
+DRAWENV draw[2];
 
-RECT	ClearRect	={0,0,320,240};
+u_long	    ot[2][OTLEN];   		        // Ordering table (contains addresses to primitives)
+char	primbuff[2][PRIMBUFFLEN] = {0};	// Primitive list // That's our prim buffer
+
+//~ int		    primcnt=0;			            // Primitive counter
+
+char * nextpri = primbuff[0];			            // Primitive counter
+
+short		    db	= 0;                        // Current buffer counter
+
+//~ RECT	ClearRect	={0,0,320,240};
 
 //~ extern unsigned long _binary_TIM_bousai_tim_start[];
 //~ extern unsigned long _binary_TIM_bousai_tim_end[];
@@ -70,7 +73,8 @@ RECT	ClearRect	={0,0,320,240};
 
 
 // Prototypes
-void init();
+void init(void);
+void display(void);
 void LoadTexture(u_long * tim, TIM_IMAGE * tparam);
 
 void init(){
@@ -78,37 +82,59 @@ void init(){
 	PadInit(0);
 	ResetGraph(0);
 	
-	
 	// Initialize and setup the GTE
 	InitGeom();
 	SetGeomOffset(CENTERX, CENTERY);        // x, y offset
 	SetGeomScreen(CENTERX);                 // Distance between eye and screen  
 	
+    	// Set the display and draw environments
+	SetDefDispEnv(&disp[0], 0, 0         , SCREENXRES, SCREENYRES);
+	SetDefDispEnv(&disp[1], 0, SCREENYRES, SCREENXRES, SCREENYRES);
     
-	// Set the display and draw environments
-	SetDefDispEnv(&disp, 0, 0, SCREENXRES, SCREENYRES);
-	SetDefDrawEnv(&draw, 0, SCREENYRES, SCREENXRES, SCREENYRES);
+	SetDefDrawEnv(&draw[0], 0, SCREENYRES, SCREENXRES, SCREENYRES);
+	SetDefDrawEnv(&draw[1], 0, 0, SCREENXRES, SCREENYRES);
     
     if (VMODE)
     {
         SetVideoMode(MODE_PAL);
-        disp.screen.y += 8;
-        }
+        disp[0].screen.y += 8;
+        disp[1].screen.y += 8;
+    }
 	
-	// Set the new display/drawing environments
-	VSync(0);
-	
-    PutDispEnv(&disp);
-	PutDrawEnv(&draw);
-	
-    ClearImage(&ClearRect, 0, 0, 127);          // Clear FB
-	
+    setRGB0(&draw[0], 0, 0, 255);
+    setRGB0(&draw[1], 0, 0, 255);
+
+    draw[0].isbg = 1;
+    draw[1].isbg = 1;
+
+    PutDispEnv(&disp[db]);
+	PutDrawEnv(&draw[db]);
+		
 	// Init font system
 	FntLoad(960, 0);
 	FntOpen(16, 16, 196, 64, 0, 256);
 	
     }
+
+void display(void){
     
+    DrawSync(0);
+    VSync(0);
+
+    PutDispEnv(&disp[db]);
+    PutDrawEnv(&draw[db]);
+
+    SetDispMask(1);
+    
+    DrawOTag(ot[db] + OTLEN - 1);
+    
+    db = !db;
+
+    nextpri = primbuff[db];
+    
+        
+    }
+
 void LoadTexture(u_long * tim, TIM_IMAGE * tparam){     // This part is from Lameguy64's tutorial series : lameguy64.net/svn/pstutorials/chapter1/3-textures.html login/pw: annoyingmous
 		OpenTIM(tim);                                   // Open the tim binary data, feed it the address of the data in memory
 		ReadTIM(tparam);                                // This read the header of the TIM data and sets the corresponding members of the TIM_IMAGE structure
@@ -132,34 +158,28 @@ int main() {
 	
 	long	t, p, OTz, Flag;                // t == vertex count, p == depth cueing interpolation value, OTz ==  value to create Z-ordered OT, Flag == see LibOver47.pdf, p.143
 	
-	SVECTOR	Rotate={ 0 };					// Rotation coordinates
-	VECTOR	Trans={ 0, 0, CENTERX, 0 };		// Translation coordinates
-	
-	// Scaling coordinates
-	VECTOR	Scale={ ONE*(1+HI_RES), ONE*(1+HI_RES), ONE*(1+HI_RES), 0 }; // ONE == 4096, is * 2 if HI_RES == 1
-	
-	MATRIX	Matrix={0};						// Matrix data for the GTE
-	
-    
-    draw.tw.w = 32; 
-    draw.tw.h = 32; 
+    POLY_GT3 *poly = {0};                           // pointer to a POLY_G4 
 
     
+	SVECTOR	Rotate={ 0 };					// Rotation coordinates
+	VECTOR	Trans={ 0, 0, CENTERX, 0 };		// Translation coordinates
+                                            // Scaling coordinates
+	VECTOR	Scale={ ONE, ONE, ONE, 0 };     // ONE == 4096
+	MATRIX	Matrix={0};						// Matrix data for the GTE
+	
+    // Texture window
+    
+    DR_MODE * dr_mode;                        // Pointer to dr_mode prim
+    
+    RECT tws = {0, 0, 32, 32};            // Texture window coordinates : x, y, w, h
+                
 	init();
     
 	LoadTexture(_binary_TIM_cube_tim_start, &tim_cube);
+    
 	// Main loop
 	while (1) {
 	
-		// Render the banner (FntPrint is always on top because it is not part of the OT)
-		//~ #if HI_RES
-		//~ FntPrint("\n\n");
-		//~ #endif
-		//~ FntPrint("\n\nGOURAUD SHADED TMESH EXAMPLE\n");
-		//~ FntPrint("SCHNAPPY, 2020 \n");
-		//~ FntPrint("BASED ON PRIMDRAW BY LAMEGUY64, 2014 \n");
-		
-		
 		// Read pad status
 		PadStatus = PadRead(0);
 		
@@ -182,7 +202,7 @@ int main() {
 					
 			if (PadStatus & PADselect) {
 				Rotate.vx = Rotate.vy = Rotate.vz = 0;
-				Scale.vx = Scale.vy = Scale.vz = ONE*(1+HI_RES);
+				Scale.vx = Scale.vy = Scale.vz = ONE;
 				Trans.vx = Trans.vy = 0;
 				Trans.vz = CENTERX;
 			}
@@ -193,7 +213,7 @@ int main() {
 			if (TPressed == 0) {
 				AutoRotate = (AutoRotate + 1) & 1;
 				Rotate.vx = Rotate.vy = Rotate.vz = 0;
-				Scale.vx = Scale.vy = Scale.vz = ONE*(1+HI_RES);
+				Scale.vx = Scale.vy = Scale.vz = ONE;
 				Trans.vx = Trans.vy = 0;
 				Trans.vz = CENTERX;
 			}
@@ -210,10 +230,8 @@ int main() {
 		
 		
 		// Clear the current OT
-		ClearOTagR(&ot[db][0], OT_LENGTH);
-		primcnt = 0;
-		
-		
+		ClearOTagR(ot[db], OTLEN);
+        
 		// Convert and set the matrixes
 		RotMatrix(&Rotate, &Matrix);
 		TransMatrix(&Matrix, &Trans);
@@ -225,106 +243,69 @@ int main() {
 		
 		// Render the sample vector model
 		t=0;
+        
         // modelCube is a TMESH, len member == # vertices, but here it's # of triangle... So, for each tri * 3 vertices ...
 		for (i = 0; i < (modelCube.len*3); i += 3) {               
 			
-			// Initialize the primitive and set its color values
-			SetPolyGT3(&primbuff[db][primcnt]);
-			setRGB0(&primbuff[db][primcnt], modelCube.c[i].r, modelCube.c[i].g, modelCube.c[i].b);
-			setRGB1(&primbuff[db][primcnt], modelCube.c[i+1].r, modelCube.c[i+1].g, modelCube.c[i+1].b);
-			setRGB2(&primbuff[db][primcnt], modelCube.c[i+2].r, modelCube.c[i+2].g, modelCube.c[i+2].b);
+            poly = (POLY_GT3 *)nextpri;
 			
-            ((POLY_GT3 *)&primbuff[db][primcnt])->tpage = getTPage(tim_cube.mode&0x3, 0,
-                                                                   tim_cube.prect->x,
-                                                                   tim_cube.prect->y);
+            // Initialize the primitive and set its color values
+			
+            SetPolyGT3(poly);
 
-            setUV3(&primbuff[db][primcnt], modelCube.u[i].vx, modelCube.u[i].vy,
-                                           modelCube.u[i+1].vx, modelCube.u[i+1].vy,
-                                           modelCube.u[i+2].vx, modelCube.u[i+2].vy);
-                                           
-            //~ FntPrint("%d %d %d %d %d %d\n", modelCube.u[i].vx, modelCube.u[i].vy,
-                                           //~ modelCube.u[i+1].vx, modelCube.u[i+1].vy,
-                                           //~ modelCube.u[i+2].vx, modelCube.u[i+2].vy);
+            ((POLY_GT3 *)poly)->tpage = getTPage(tim_cube.mode&0x3, 0,
+                                                 tim_cube.prect->x,
+                                                 tim_cube.prect->y
+                                                );
+
+			setRGB0(poly, modelCube.c[i].r , modelCube.c[i].g   , modelCube.c[i].b);
+			setRGB1(poly, modelCube.c[i+1].r, modelCube.c[i+1].g, modelCube.c[i+1].b);
+			setRGB2(poly, modelCube.c[i+2].r, modelCube.c[i+2].g, modelCube.c[i+2].b);
+
+            setUV3(poly, modelCube.u[i].vx, modelCube.u[i].vy,
+                         modelCube.u[i+1].vx, modelCube.u[i+1].vy,
+                         modelCube.u[i+2].vx, modelCube.u[i+2].vy);
+                         
             // Rotate, translate, and project the vectors and output the results into a primitive
 
-            OTz = RotTransPers(&modelCube_mesh[modelCube_index[t]], (long*)&primbuff[db][primcnt].x0, &p, &Flag);
-            
-			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+1]], (long*)&primbuff[db][primcnt].x1, &p, &Flag);
-			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+2]], (long*)&primbuff[db][primcnt].x2, &p, &Flag);
+            OTz  = RotTransPers(&modelCube_mesh[modelCube_index[t]]  , (long*)&poly->x0, &p, &Flag);
+			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+1]], (long*)&poly->x1, &p, &Flag);
+			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+2]], (long*)&poly->x2, &p, &Flag);
 			
 			// Sort the primitive into the OT
 			OTz /= 3;
-			if ((OTz > 0) && (OTz < OT_LENGTH))
-				AddPrim(&ot[db][OTz-2], &primbuff[db][primcnt]);
+			if ((OTz > 0) && (OTz < OTLEN))
+				AddPrim(&ot[db][OTz-2], poly);
 			
-			primcnt++;
+			nextpri += sizeof(POLY_GT3);
+            
 			t+=3;
 			
 		}
         
-		//~ t=0;
-        //~ // modelCube is a TMESH, len member == # vertices, but here it's # of triangle... So, for each tri * 3 vertices ...
-		//~ for (i = 0; i < (modelPlan.len*3); i += 3) {               
-			
-			//~ // Initialize the primitive and set its color values
-			//~ SetPolyG3(&primbuff[db][primcnt]);
-			//~ setRGB0(&primbuff[db][primcnt], modelPlan.c[i].r, modelPlan.c[i].g, modelPlan.c[i].b);
-			//~ setRGB1(&primbuff[db][primcnt], modelPlan.c[i+1].r, modelPlan.c[i+1].g, modelPlan.c[i+1].b);
-			//~ setRGB2(&primbuff[db][primcnt], modelPlan.c[i+2].r, modelPlan.c[i+2].g, modelPlan.c[i+2].b);
-			
-            //~ // Rotate, translate, and project the vectors and output the results into a primitive
-
-            //~ OTz = RotTransPers(&modelPlan_mesh[modelPlan_index[t]], (long*)&primbuff[db][primcnt].x0, &p, &Flag);
+            dr_mode = (DR_MODE *)nextpri;
             
-			//~ OTz += RotTransPers(&modelPlan_mesh[modelPlan_index[t+1]], (long*)&primbuff[db][primcnt].x1, &p, &Flag);
-			//~ OTz += RotTransPers(&modelPlan_mesh[modelPlan_index[t+2]], (long*)&primbuff[db][primcnt].x2, &p, &Flag);
-			
-			//~ // Sort the primitive into the OT
-			//~ OTz /= 3;
-			//~ if ((OTz > 0) && (OTz < OT_LENGTH))
-				//~ AddPrim(&ot[db][OTz-2], &primbuff[db][primcnt]);
-			
-			//~ primcnt++;
-			//~ t+=3;
-			
-		//~ }
+            setDrawMode(dr_mode,1,0, getTPage(tim_cube.mode&0x3, 0,
+                                              tim_cube.prect->x,
+                                              tim_cube.prect->y), &tws);  //set texture window
+        
+            AddPrim(&ot[db], dr_mode);
+            
+            nextpri += sizeof(DR_MODE);
+        
+        	// Render the banner (FntPrint is always on top because it is not part of the OT)
+		//~ #if HI_RES
+		//~ FntPrint("\n\n");
+		//~ #endif
+		//~ FntPrint("\n\nGOURAUD SHADED TMESH EXAMPLE\n");
+		//~ FntPrint("SCHNAPPY, 2020 \n");
+		//~ FntPrint("BASED ON PRIMDRAW BY LAMEGUY64, 2014 \n");
+	
+        
+        FntFlush(-1);
 		
-		
-		// Prepare to switch buffers
-		#if HI_RES == 0
-		SetDefDispEnv(&disp, 0, 240*db, 320, 240);
-		SetDefDrawEnv(&draw, 0, 240*(1-db), 320, 240);
-		#endif
-		
+		display();
 
-		// Wait for all drawing to finish
-		DrawSync(0);
-		
-		// Clear the current buffer before rendering the next frame
-		#if HI_RES == 0
-		ClearRect.y = 240*db;
-		#endif
-		ClearImage(&ClearRect, 0, 0, 127);
-		
-		// Begin rendering the next frame
-		DrawOTag(&ot[db][OT_LENGTH-1]);
-		FntFlush(0);
-		
-		
-		// Wait for VSync and then switch buffers
-		VSync(0);
-		#if HI_RES == 0
-		PutDispEnv(&disp);
-		PutDrawEnv(&draw);
-		#endif
-		SetDispMask(1);
-		
-		
-		// Toggle buffer index
-		#if HI_RES == 0
-		db = !db;
-		#endif
-		
 	}
     return 0;
 }
