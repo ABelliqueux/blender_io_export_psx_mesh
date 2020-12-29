@@ -1,4 +1,4 @@
-![Pic or it didn't happen](primdrawG.jpg)
+![Pic or it didn't happen](blender-psx.jpg)
 
 # blender_io_export_psx_tmesh
 
