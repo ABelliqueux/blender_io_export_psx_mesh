@@ -1,7 +1,6 @@
-
 /*  primdrawG.c, by Schnappy, 12-2020
     
-    - Draw a gouraud shaded mesh exported as a TMESH by the blender <= 2.79b plugin io_export_psx_tmesh.py
+    - Draw a gouraud shaded, UV textured mesh exported by the blender <= 2.79b plugin io_export_psx_tmesh.py
     
     based on primdraw.c by Lameguy64 (http://www.psxdev.net/forum/viewtopic.php?f=64&t=537)
 	2014 Meido-Tek Productions.
@@ -39,7 +38,8 @@
 // Sample vector model
 #include "cube.c"
 
-#define VMODE       0
+#define VMODE       1
+#define HAS_TEX       0
 
 #define SCREENXRES 320
 #define SCREENYRES 240
@@ -48,7 +48,7 @@
 #define CENTERY		SCREENYRES/2
 
 #define OTLEN	    2048	    // Maximum number of OT entries
-#define PRIMBUFFLEN	32768	    // Maximum number of POLY_GT3 primitives
+#define PRIMBUFFLEN	1024 * sizeof(POLY_GT3)	    // Maximum number of POLY_GT3 primitives
 
 // Display and draw environments, double buffered
 DISPENV disp[2];
@@ -61,8 +61,9 @@ char	primbuff[2][PRIMBUFFLEN] = {0};	// Primitive list // That's our prim buffer
 
 char * nextpri = primbuff[0];			            // Primitive counter
 
-short		    db	= 0;                        // Current buffer counter
+char		    db	= 0;                        // Current buffer counter
 
+short vs;
 //~ RECT	ClearRect	={0,0,320,240};
 
 //~ extern unsigned long _binary_TIM_bousai_tim_start[];
@@ -71,6 +72,7 @@ short		    db	= 0;                        // Current buffer counter
 
 //~ TIM_IMAGE bousai;
 
+//~ static int frame = 0;
 
 // Prototypes
 void init(void);
@@ -101,8 +103,8 @@ void init(){
         disp[1].screen.y += 8;
     }
 	
-    setRGB0(&draw[0], 0, 0, 255);
-    setRGB0(&draw[1], 0, 0, 255);
+    setRGB0(&draw[0], 80, 80, 255);
+    setRGB0(&draw[1], 80, 80, 255);
 
     draw[0].isbg = 1;
     draw[1].isbg = 1;
@@ -119,7 +121,7 @@ void init(){
 void display(void){
     
     DrawSync(0);
-    VSync(0);
+    vs = VSync(0);
 
     PutDispEnv(&disp[db]);
     PutDrawEnv(&draw[db]);
@@ -175,10 +177,13 @@ int main() {
                 
 	init();
     
-	LoadTexture(_binary_TIM_cube_tim_start, &tim_cube);
+    for (int k = 0; k < sizeof(meshes)/sizeof(TMESH *); k++){
+        LoadTexture(meshes[k]->tim_data, meshes[k]->tim);
+    }
     
 	// Main loop
 	while (1) {
+    //~ while ((VSync(-1) - frame) < 1){
 	
 		// Read pad status
 		PadStatus = PadRead(0);
@@ -192,8 +197,8 @@ int main() {
 
 			if (PadStatus & PADLup)		Rotate.vx -= 8;
 			if (PadStatus & PADLdown)	Rotate.vx += 8;
-			if (PadStatus & PADLleft)	Rotate.vy -= 8;
-			if (PadStatus & PADLright)	Rotate.vy += 8;
+			if (PadStatus & PADLleft)	Rotate.vy -= 14;
+			if (PadStatus & PADLright)	Rotate.vy += 14;
 			
 			if (PadStatus & PADRup)		Trans.vy -= 2;
 			if (PadStatus & PADRdown)	Trans.vy += 2;
@@ -240,58 +245,73 @@ int main() {
 		SetRotMatrix(&Matrix);
 		SetTransMatrix(&Matrix);
 		
-		
-		// Render the sample vector model
-		t=0;
+		for (int k = 0; k < sizeof(meshes)/sizeof(TMESH *); k++){
         
-        // modelCube is a TMESH, len member == # vertices, but here it's # of triangle... So, for each tri * 3 vertices ...
-		for (i = 0; i < (modelCube.len*3); i += 3) {               
-			
-            poly = (POLY_GT3 *)nextpri;
-			
-            // Initialize the primitive and set its color values
-			
-            SetPolyGT3(poly);
-
-            ((POLY_GT3 *)poly)->tpage = getTPage(tim_cube.mode&0x3, 0,
-                                                 tim_cube.prect->x,
-                                                 tim_cube.prect->y
-                                                );
-
-			setRGB0(poly, modelCube.c[i].r , modelCube.c[i].g   , modelCube.c[i].b);
-			setRGB1(poly, modelCube.c[i+1].r, modelCube.c[i+1].g, modelCube.c[i+1].b);
-			setRGB2(poly, modelCube.c[i+2].r, modelCube.c[i+2].g, modelCube.c[i+2].b);
-
-            setUV3(poly, modelCube.u[i].vx, modelCube.u[i].vy,
-                         modelCube.u[i+1].vx, modelCube.u[i+1].vy,
-                         modelCube.u[i+2].vx, modelCube.u[i+2].vy);
-                         
-            // Rotate, translate, and project the vectors and output the results into a primitive
-
-            OTz  = RotTransPers(&modelCube_mesh[modelCube_index[t]]  , (long*)&poly->x0, &p, &Flag);
-			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+1]], (long*)&poly->x1, &p, &Flag);
-			OTz += RotTransPers(&modelCube_mesh[modelCube_index[t+2]], (long*)&poly->x2, &p, &Flag);
-			
-			// Sort the primitive into the OT
-			OTz /= 3;
-			if ((OTz > 0) && (OTz < OTLEN))
-				AddPrim(&ot[db][OTz-2], poly);
-			
-			nextpri += sizeof(POLY_GT3);
+            // Render the sample vector model
+            t=0;
             
-			t+=3;
-			
-		}
+            // modelCube is a TMESH, len member == # vertices, but here it's # of triangle... So, for each tri * 3 vertices ...
+            for (i = 0; i < (meshes[0]->tmesh->len * 3); i += 3) {               
+                
+                poly = (POLY_GT3 *)nextpri;
+                
+                // Initialize the primitive and set its color values
+                
+                SetPolyGT3(poly);
+                
+                setRGB0(poly, meshes[k]->tmesh->c[i].r  , meshes[k]->tmesh->c[i].g  , meshes[k]->tmesh->c[i].b);
+                setRGB1(poly, meshes[k]->tmesh->c[i+1].r, meshes[k]->tmesh->c[i+1].g, meshes[k]->tmesh->c[i+1].b);
+                setRGB2(poly, meshes[k]->tmesh->c[i+2].r, meshes[k]->tmesh->c[i+2].g, meshes[k]->tmesh->c[i+2].b);
+            
+                ((POLY_GT3 *)poly)->tpage = getTPage(meshes[k]->tim->mode&0x3, 0,
+                                                     meshes[k]->tim->prect->x,
+                                                     meshes[k]->tim->prect->y
+                                                    );
+                // The TIMs are loaded in vram vertically on the same TPAGE; eg. Tim1 640,0, Tim1 640, 128
+                // We then add tim_image.prect.y to the y coord of the uvs to use the correct texture.
+                 
+                setUV3(poly, meshes[k]->tmesh->u[i].vx  , meshes[k]->tmesh->u[i].vy   + meshes[k]->tim->prect->y,
+                             meshes[k]->tmesh->u[i+1].vx, meshes[k]->tmesh->u[i+1].vy + meshes[k]->tim->prect->y,
+                             meshes[k]->tmesh->u[i+2].vx, meshes[k]->tmesh->u[i+2].vy + meshes[k]->tim->prect->y);
+                             
+                // Rotate, translate, and project the vectors and output the results into a primitive
+
+                OTz  = RotTransPers(&meshes[k]->tmesh->v[meshes[k]->index[t]]  , (long*)&poly->x0, &p, &Flag);
+                OTz += RotTransPers(&meshes[k]->tmesh->v[meshes[k]->index[t+1]], (long*)&poly->x1, &p, &Flag);
+                OTz += RotTransPers(&meshes[k]->tmesh->v[meshes[k]->index[t+2]], (long*)&poly->x2, &p, &Flag);
+                
+                
+                // Using RotTransPers3 is a bit faster (-31ms/frame), but you loose precision for Z-ordering
+                //~ OTz = RotTransPers3(
+                        //~ &meshes[k]->tmesh->v[meshes[k]->index[t]],  
+                        //~ &meshes[k]->tmesh->v[meshes[k]->index[t+1]],
+                        //~ &meshes[k]->tmesh->v[meshes[k]->index[t+2]],
+                        //~ (long*)&poly->x0, (long*)&poly->x1, (long*)&poly->x2,
+                        //~ &p,
+                        //~ &Flag
+                        //~ );
+                
+                // Sort the primitive into the OT
+                OTz /= 3;
+                if ((OTz > 0) && (OTz < OTLEN))
+                    AddPrim(&ot[db][OTz-2], poly);
+                
+                nextpri += sizeof(POLY_GT3);
+                
+                t+=3;
+                
+            }
+        }
         
-            dr_mode = (DR_MODE *)nextpri;
-            
-            setDrawMode(dr_mode,1,0, getTPage(tim_cube.mode&0x3, 0,
-                                              tim_cube.prect->x,
-                                              tim_cube.prect->y), &tws);  //set texture window
+        //~ dr_mode = (DR_MODE *)nextpri;
         
-            AddPrim(&ot[db], dr_mode);
-            
-            nextpri += sizeof(DR_MODE);
+        //~ setDrawMode(dr_mode,1,0, getTPage(tim_cube.mode&0x3, 0,
+                                          //~ tim_cube.prect->x,
+                                          //~ tim_cube.prect->y), &tws);  //set texture window
+    
+        //~ AddPrim(&ot[db], dr_mode);
+        
+        //~ nextpri += sizeof(DR_MODE);
         
         	// Render the banner (FntPrint is always on top because it is not part of the OT)
 		//~ #if HI_RES
@@ -300,11 +320,16 @@ int main() {
 		//~ FntPrint("\n\nGOURAUD SHADED TMESH EXAMPLE\n");
 		//~ FntPrint("SCHNAPPY, 2020 \n");
 		//~ FntPrint("BASED ON PRIMDRAW BY LAMEGUY64, 2014 \n");
-	
+		FntPrint("# tris :%d \n", modelCube.len);
+		FntPrint("Vsync :%d \n", vs);	
+		FntPrint("%d ", sizeof(meshes)/sizeof(TMESH *));	
+		FntPrint("%d ", meshes[0]->tim->prect->y);	
         
         FntFlush(-1);
 		
 		display();
+
+        //~ frame = VSync(-1);
 
 	}
     return 0;

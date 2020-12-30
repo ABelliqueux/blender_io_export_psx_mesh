@@ -27,6 +27,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                  
         scale = 20
         f = open(os.path.normpath(self.filepath),"w+")
+        
+        # write typedef struct
+        f.write("typedef struct {  \n"+
+                "\tTMESH *     tmesh;\n" +
+                "\tTIM_IMAGE * tim;  \n" + 
+                "\tint *       index;\n" +
+                "\tu_long *    tim_data;\n"
+                "\t} MESH;\n\n")
+        
         for m in bpy.data.meshes:
  
             # Write vertices vectors
@@ -51,7 +60,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\n")
             f.write("};\n\n")
  
-            # Write UVs vectors
+            # Write UVs vectors if a texture exists
+            
             # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
             # bpy.context.active_object.data.uv_textures.active.data[0].image.name
             # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath
@@ -60,21 +70,22 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # get image size x, y
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
-            
-            f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
-            texture_image = m.uv_textures[0].data[0].image
-            tex_width = texture_image.size[0]
-            tex_height = texture_image.size[1]
-            uv_layer = m.uv_layers[0].data
-            for i in range(len(uv_layer)):
-                u = uv_layer[i].uv
-                # psx UV coordinates are Top Left, while Blender is Bottom Left
-                f.write("\t"+str(u.x * tex_width)+","+str(tex_height - u.y * tex_height)+", 0, 0")
-                if i != len(uv_layer) - 1:
-                    f.write(",")
-                f.write("\n")
-            f.write("};\n\n")
- 
+            if len(m.uv_textures) != 0:
+                f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
+                texture_image = m.uv_textures[l].data[0].image
+                tex_width = texture_image.size[0]
+                tex_height = texture_image.size[1]
+                uv_layer = m.uv_layers[0].data
+                for i in range(len(uv_layer)):
+                    u = uv_layer[i].uv
+                    ux = u.x * tex_width
+                    uy = u.y * tex_height
+                    f.write("\t"+str(ux)+","+str(tex_height - uy)+", 0, 0")
+                    if i != len(uv_layer) - 1:
+                        f.write(",")
+                    f.write("\n")
+                f.write("};\n\n")
+         
             # Write vertex colors vectors
  
             f.write("CVECTOR "+"model"+m.name+"_color[] = {\n") 
@@ -90,9 +101,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             else:                                  
                 for i in range(len(m.polygons) * 3):
                     if i % 3 == 0:
-                        f.write("\t200,200,200,0")  # Let's add a bit more relief with a shade of grey
+                        f.write("\t80,80,80,0")  # Let's add a bit more relief with a shade of grey
                     else:
-                        f.write("\t255,255,255,0")
+                        f.write("\t128,128,128,0")
                     if i != (len(m.polygons) * 3) - 1:
                         f.write(",")
                     f.write("\n")
@@ -110,10 +121,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
  
             # Write TMESH struct
             f.write("TMESH "+"model"+m.name+" = {\n")
-            f.write("\t"+"model"+m.name+"_mesh,\n")
+            f.write("\t"+"model"+m.name+"_mesh,  \n")
             f.write("\t"+"model"+m.name+"_normal,\n")
-            f.write("\t"+"model"+m.name+"_uv,\n")
-            f.write("\t"+"model"+m.name+"_color,\n")
+            if len(m.uv_textures) != 0:
+                f.write("\t"+"model"+m.name+"_uv,\n")
+            else:
+                f.write("\t0,\n")
+            f.write("\t"+"model"+m.name+"_color, \n")
             
             # According to libgte.h, TMESH.len should be # of vertices. Meh...
             f.write("\t"+str(len(m.polygons))+"\n")
@@ -121,13 +135,28 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # write texture binary name and declare TIM_IMAGE
             # by default, load the file from the TIM folder
-            tex_name = texture_image.name
-            prefix   = str.partition(tex_name, ".")[0]
-            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
-            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
-            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
-            f.write("TIM_IMAGE tim_" + prefix + ";\n")
+            if len(m.uv_textures) != 0:
+                tex_name = texture_image.name
+                prefix   = str.partition(tex_name, ".")[0]
+                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+                f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
             
+            f.write("MESH mesh"+m.name+" = {\n")
+            f.write("\t&model"+ m.name +",\n")
+            f.write("\t&tim_"+ prefix + ",\n")
+            f.write("\tmodel" + m.name + "_index,\n")
+            f.write("\t_binary_TIM_" + prefix + "_tim_start\n")
+            f.write("};\n\n")
+
+        f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
+        for k in range(len(bpy.data.meshes)): 
+            f.write("\t&mesh" + bpy.data.meshes[k].name)
+            if k != len(bpy.data.meshes) - 1:
+                f.write(",\n")
+        f.write("\n}; \n")
+        
         f.close()
         return {'FINISHED'};
  

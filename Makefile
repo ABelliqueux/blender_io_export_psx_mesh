@@ -1,9 +1,10 @@
-TARGET = primdrawGT
+TARGET = primdrawGT-db-abs
 TYPE = ps-exe
 
-SRCS = primdrawGT.c \
+SRCS = primdrawGT-db-abs.c \
 ../common/crt0/crt0.s \
 TIM/cube.tim \
+TIM/bousai.tim \
 
 CPPFLAGS += -I../psyq/include
 LDFLAGS += -L../psyq/lib
