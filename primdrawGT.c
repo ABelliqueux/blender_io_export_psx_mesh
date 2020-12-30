@@ -36,9 +36,9 @@
 #include <stdio.h>
 
 // Sample vector model
-#include "cube.c"
+#include "coridor.c"
 
-#define VMODE       1
+#define VMODE       0
 #define HAS_TEX       0
 
 #define SCREENXRES 320
@@ -87,7 +87,7 @@ void init(){
 	// Initialize and setup the GTE
 	InitGeom();
 	SetGeomOffset(CENTERX, CENTERY);        // x, y offset
-	SetGeomScreen(CENTERX);                 // Distance between eye and screen  
+	SetGeomScreen(CENTERX*2);                 // Distance between eye and screen  
 	
     	// Set the display and draw environments
 	SetDefDispEnv(&disp[0], 0, 0         , SCREENXRES, SCREENYRES);
@@ -164,7 +164,7 @@ int main() {
 
     
 	SVECTOR	Rotate={ 0 };					// Rotation coordinates
-	VECTOR	Trans={ 0, 0, CENTERX, 0 };		// Translation coordinates
+	VECTOR	Trans={ 0, 0, CENTERX*2, 0 };		// Translation coordinates
                                             // Scaling coordinates
 	VECTOR	Scale={ ONE, ONE, ONE, 0 };     // ONE == 4096
 	MATRIX	Matrix={0};						// Matrix data for the GTE
@@ -262,7 +262,7 @@ int main() {
                 setRGB0(poly, meshes[k]->tmesh->c[i].r  , meshes[k]->tmesh->c[i].g  , meshes[k]->tmesh->c[i].b);
                 setRGB1(poly, meshes[k]->tmesh->c[i+1].r, meshes[k]->tmesh->c[i+1].g, meshes[k]->tmesh->c[i+1].b);
                 setRGB2(poly, meshes[k]->tmesh->c[i+2].r, meshes[k]->tmesh->c[i+2].g, meshes[k]->tmesh->c[i+2].b);
-            
+                
                 ((POLY_GT3 *)poly)->tpage = getTPage(meshes[k]->tim->mode&0x3, 0,
                                                      meshes[k]->tim->prect->x,
                                                      meshes[k]->tim->prect->y
@@ -320,7 +320,7 @@ int main() {
 		//~ FntPrint("\n\nGOURAUD SHADED TMESH EXAMPLE\n");
 		//~ FntPrint("SCHNAPPY, 2020 \n");
 		//~ FntPrint("BASED ON PRIMDRAW BY LAMEGUY64, 2014 \n");
-		FntPrint("# tris :%d \n", modelCube.len);
+		FntPrint("# tris :%d \n", sizeof(ot[db])/sizeof(POLY_GT3));
 		FntPrint("Vsync :%d \n", vs);	
 		FntPrint("%d ", sizeof(meshes)/sizeof(TMESH *));	
 		FntPrint("%d ", meshes[0]->tim->prect->y);	

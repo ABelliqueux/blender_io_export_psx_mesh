@@ -21,18 +21,34 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     filename_ext    = ".c";
     
     def execute(self, context):
+        import bmesh
+        
+        def triangulate_object(obj): # Stolen from here : https://blender.stackexchange.com/questions/45698/triangulate-mesh-in-python/45722#45722
+            me = obj.data
+            # Get a BMesh representation
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method=0, ngon_method=0)
+            # Finish up, write the bmesh back to the mesh
+            bm.to_mesh(me)
+            bm.free()
         
         # Leave edit mode to avoid errors
         bpy.ops.object.mode_set(mode='OBJECT')
-                 
-        scale = 20
+
+        # triangulate objects of type mesh 
+        for m in range(len(bpy.data.objects)):
+            if bpy.data.objects[m].type == 'MESH':
+                triangulate_object(bpy.data.objects[m])
+        
+        scale = 120
         f = open(os.path.normpath(self.filepath),"w+")
         
         # write typedef struct
         f.write("typedef struct {  \n"+
                 "\tTMESH *     tmesh;\n" +
-                "\tTIM_IMAGE * tim;  \n" + 
                 "\tint *       index;\n" +
+                "\tTIM_IMAGE * tim;  \n" + 
                 "\tu_long *    tim_data;\n"
                 "\t} MESH;\n\n")
         
@@ -70,9 +86,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # get image size x, y
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
-            if len(m.uv_textures) != 0:
+            if m.uv_textures[0].data[0].image != None:
                 f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
-                texture_image = m.uv_textures[l].data[0].image
+                texture_image = m.uv_textures[0].data[0].image
                 tex_width = texture_image.size[0]
                 tex_height = texture_image.size[1]
                 uv_layer = m.uv_layers[0].data
@@ -91,7 +107,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("CVECTOR "+"model"+m.name+"_color[] = {\n") 
             # If vertex colors exist, use them
             if len(m.vertex_colors) != 0:           
-                colors = m.vertex_colors["Col"].data
+                colors = m.vertex_colors[0].data
                 for i in range(len(colors)):
                     f.write("\t"+str(int(colors[i].color.r*255))+","+str(int(colors[i].color.g*255))+","+str(int(colors[i].color.b*255))+", 0")
                     if i != len(colors) - 1:
@@ -123,10 +139,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("TMESH "+"model"+m.name+" = {\n")
             f.write("\t"+"model"+m.name+"_mesh,  \n")
             f.write("\t"+"model"+m.name+"_normal,\n")
-            if len(m.uv_textures) != 0:
+            
+            if m.uv_textures[0].data[0].image != None:
                 f.write("\t"+"model"+m.name+"_uv,\n")
             else:
                 f.write("\t0,\n")
+            
             f.write("\t"+"model"+m.name+"_color, \n")
             
             # According to libgte.h, TMESH.len should be # of vertices. Meh...
@@ -135,9 +153,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # write texture binary name and declare TIM_IMAGE
             # by default, load the file from the TIM folder
-            if len(m.uv_textures) != 0:
+            # ~ if len(m.uv_textures) != 0:
+            if m.uv_textures[0].data[0].image != None:
                 tex_name = texture_image.name
-                prefix   = str.partition(tex_name, ".")[0]
+                prefix   = str.partition(tex_name, ".")[0].replace('-','_')
                 f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
                 f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
                 f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
@@ -145,9 +164,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("MESH mesh"+m.name+" = {\n")
             f.write("\t&model"+ m.name +",\n")
-            f.write("\t&tim_"+ prefix + ",\n")
             f.write("\tmodel" + m.name + "_index,\n")
-            f.write("\t_binary_TIM_" + prefix + "_tim_start\n")
+            
+            if m.uv_textures[0].data[0].image != None:
+                f.write("\t&tim_"+ prefix + ",\n")
+                f.write("\t_binary_TIM_" + prefix + "_tim_start\n") 
+            else:
+                f.write("0,\n" +
+                        "0,\n")
+            
             f.write("};\n\n")
 
         f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")

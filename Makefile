@@ -3,8 +3,9 @@ TYPE = ps-exe
 
 SRCS = primdrawGT-db-abs.c \
 ../common/crt0/crt0.s \
-TIM/cube.tim \
-TIM/bousai.tim \
+#~ TIM/cube.tim \
+#~ TIM/bousai.tim \
+TIM/home.tim \
 
 CPPFLAGS += -I../psyq/include
 LDFLAGS += -L../psyq/lib
