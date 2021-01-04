@@ -22,6 +22,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
     def execute(self, context):
         import bmesh
+        from math import degrees
         
         def triangulate_object(obj): # Stolen from here : https://blender.stackexchange.com/questions/45698/triangulate-mesh-in-python/45722#45722
             me = obj.data
@@ -41,15 +42,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if bpy.data.objects[m].type == 'MESH':
                 triangulate_object(bpy.data.objects[m])
         
-        scale = 120
+        scale = 200
         f = open(os.path.normpath(self.filepath),"w+")
         
         # write typedef struct
         f.write("typedef struct {  \n"+
-                "\tTMESH *     tmesh;\n" +
-                "\tint *       index;\n" +
-                "\tTIM_IMAGE * tim;  \n" + 
-                "\tu_long *    tim_data;\n"
+                "\tTMESH   *    tmesh;\n" +
+                "\tint     *    index;\n" +
+                "\tTIM_IMAGE *  tim;  \n" + 
+                "\tu_long  *    tim_data;\n"+
+                "\tMATRIX  *    mat;\n" + 
+                "\tVECTOR  *    pos;\n" + 
+                "\tSVECTOR *    rot;\n" +
+                "\tshort   *    isPrism;\n" +
+                "\tlong    *    p;\n" + 
                 "\t} MESH;\n\n")
         
         for m in bpy.data.meshes:
@@ -86,22 +92,24 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # get image size x, y
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
             # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
-            if m.uv_textures[0].data[0].image != None:
-                f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
-                texture_image = m.uv_textures[0].data[0].image
-                tex_width = texture_image.size[0]
-                tex_height = texture_image.size[1]
-                uv_layer = m.uv_layers[0].data
-                for i in range(len(uv_layer)):
-                    u = uv_layer[i].uv
-                    ux = u.x * tex_width
-                    uy = u.y * tex_height
-                    f.write("\t"+str(ux)+","+str(tex_height - uy)+", 0, 0")
-                    if i != len(uv_layer) - 1:
-                        f.write(",")
-                    f.write("\n")
-                f.write("};\n\n")
-         
+            if len(m.uv_textures) != 0:
+                for t in range(len(m.uv_textures)):
+                    if m.uv_textures[t].data[0].image != None:
+                        f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
+                        texture_image = m.uv_textures[t].data[0].image
+                        tex_width = texture_image.size[0]
+                        tex_height = texture_image.size[1]
+                        uv_layer = m.uv_layers[0].data
+                        for i in range(len(uv_layer)):
+                            u = uv_layer[i].uv
+                            ux = u.x * tex_width
+                            uy = u.y * tex_height
+                            f.write("\t"+str(ux)+","+str(tex_height - uy)+", 0, 0")
+                            if i != len(uv_layer) - 1:
+                                f.write(",")
+                            f.write("\n")
+                        f.write("};\n\n")
+             
             # Write vertex colors vectors
  
             f.write("CVECTOR "+"model"+m.name+"_color[] = {\n") 
@@ -135,13 +143,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\n")
             f.write("};\n\n")
  
+            #write object matrix, rot and pos vectors
+            f.write("MATRIX model"+m.name+"_matrix = {0};\n" +
+                    "VECTOR model"+m.name+"_pos    = {"+ str(bpy.data.objects[m.name].location.x * 100) + "," + str(bpy.data.objects[m.name].location.y * 100) + "," + str(bpy.data.objects[m.name].location.z * 100) + ", 0};\n" +
+                    "SVECTOR model"+m.name+"_rot   = {"+ str(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.z)/360 * 4096) + "};\n" +
+                    "short model"+m.name+"_isPrism = 0;\n" +
+                    "long model"+m.name+"_p = 0;\n" +
+                    "\n")
+ 
             # Write TMESH struct
             f.write("TMESH "+"model"+m.name+" = {\n")
             f.write("\t"+"model"+m.name+"_mesh,  \n")
             f.write("\t"+"model"+m.name+"_normal,\n")
             
-            if m.uv_textures[0].data[0].image != None:
-                f.write("\t"+"model"+m.name+"_uv,\n")
+            if len(m.uv_textures) != 0:
+                for t in range(len(m.uv_textures)):
+                    if m.uv_textures[0].data[0].image != None:
+                        f.write("\t"+"model"+m.name+"_uv,\n")
             else:
                 f.write("\t0,\n")
             
@@ -154,25 +172,35 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # write texture binary name and declare TIM_IMAGE
             # by default, load the file from the TIM folder
             # ~ if len(m.uv_textures) != 0:
-            if m.uv_textures[0].data[0].image != None:
-                tex_name = texture_image.name
-                prefix   = str.partition(tex_name, ".")[0].replace('-','_')
-                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
-                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
-                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
-                f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
-            
+            if len(m.uv_textures) != 0:
+                for t in range(len(m.uv_textures)): 
+                    if m.uv_textures[0].data[0].image != None:
+                        tex_name = texture_image.name
+                        prefix   = str.partition(tex_name, ".")[0].replace('-','_')
+                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+                        f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
+                
             f.write("MESH mesh"+m.name+" = {\n")
             f.write("\t&model"+ m.name +",\n")
             f.write("\tmodel" + m.name + "_index,\n")
             
-            if m.uv_textures[0].data[0].image != None:
-                f.write("\t&tim_"+ prefix + ",\n")
-                f.write("\t_binary_TIM_" + prefix + "_tim_start\n") 
+            if len(m.uv_textures) != 0:
+                for t in range(len(m.uv_textures)):
+                    if m.uv_textures[0].data[0].image != None:
+                        f.write("\t&tim_"+ prefix + ",\n")
+                        f.write("\t_binary_TIM_" + prefix + "_tim_start,\n") 
             else:
-                f.write("0,\n" +
-                        "0,\n")
-            
+                f.write("\t0,\n" +
+                        "\t0,\n")            
+            f.write("\t&model"+m.name+"_matrix,\n" +
+                    "\t&model"+m.name+"_pos,\n" +
+                    "\t&model"+m.name+"_rot,\n" +
+                    "\t&model"+m.name+"_isPrism,\n" +
+                    "\t&model"+m.name+"_p\n")
+                    
+                    
             f.write("};\n\n")
 
         f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
