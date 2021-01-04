@@ -2,9 +2,11 @@
 
 # blender_io_export_psx_tmesh
 
-Blender <= 2.79c plugin to export a gouraud shaded, UV textured PSX mesh to a C file.
+Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
 
-Specifically, it generates a C file containing :
+![3d scene](scene.gif)
+
+Specifically, it generates a C file containing for each mesh in the scene:
 
   * an array of SVECTOR containing the vertices coordinates
   * an array of SVECTOR containing the normals
@@ -15,6 +17,33 @@ Specifically, it generates a C file containing :
   * declarations of the binary in memory
   * a TIM_IMAGE struct ready to host the image data
 
+A few usefull stuff for manipulating the mesh :
+
+  * a MATRIX that will hold the mesh tranformations
+  * a VECTOR holding the object's location in world coordinates
+  * a SVECTOR holding the object's rotation in PSX angle units (1 == 4096)
+  * a flag isPrism for a pseudo-refraction effect. If 1, texture is the framebuffer draw area ( __WIP__ )
+  * a long holding p, the depth-cueing interpolation value used by the PSX
+  
+  For easy access to those, a MESH struct is defined as :
+  
+```c
+typedef struct {  
+	TMESH   *    tmesh;
+	int     *    index;
+	TIM_IMAGE *  tim;  
+	u_long  *    tim_data;
+	MATRIX  *    mat;
+	VECTOR  *    pos;
+	SVECTOR *    rot;
+	short   *    isPrism;
+	long    *    p;
+	} MESH;
+
+```
+
+## TMESH struct :
+  
 From `libgte.h`  :
 
 ```c
