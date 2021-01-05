@@ -43,11 +43,10 @@
 #include "psin.c"
 #include "pcos.c"
 
-// Sample vector model
+// Sample model
 #include "coridor.c"
 
-#define VMODE       0
-#define HAS_TEX       0
+#define VMODE       0                           // 0: NTSC, 1: PAL
 
 #define SCREENXRES 320
 #define SCREENYRES 240
@@ -55,7 +54,7 @@
 #define CENTERX		SCREENXRES/2
 #define CENTERY		SCREENYRES/2
 
-#define OTLEN	    2048	    // Maximum number of OT entries
+#define OTLEN	    2048	                    // Maximum number of OT entries
 #define PRIMBUFFLEN	1024 * sizeof(POLY_GT3)	    // Maximum number of POLY_GT3 primitives
 
 // Display and draw environments, double buffered
@@ -63,37 +62,26 @@ DISPENV disp[2];
 DRAWENV draw[2];
 
 u_long	    ot[2][OTLEN]  = {0};   		        // Ordering table (contains addresses to primitives)
-char	primbuff[2][PRIMBUFFLEN] = {0};	// Primitive list // That's our prim buffer
+char	primbuff[2][PRIMBUFFLEN] = {0};	        // Primitive list // That's our prim buffer
 
-//~ int		    primcnt=0;			            // Primitive counter
-
-char * nextpri = primbuff[0];			            // Primitive counter
+char * nextpri = primbuff[0];			        // Primitive counter
 
 char		    db	= 0;                        // Current buffer counter
 
 short vs;
 
 int		PadStatus;
-//~ int		TPressed=0;
-//~ int		AutoRotate=0;
-
-//~ SVECTOR	Rotate={0};					// Rotation coordinates
-//~ VECTOR	Trans={ 0, 0, CENTERX, 0 };		// Translation coordinates
-//~ MATRIX	Matrix={0};						// Matrix data for the GTE
-                                        //~ // Scaling coordinates
-//~ VECTOR	Scale={ ONE, ONE, ONE, 0 };     // ONE == 4096
 
 typedef struct{
-    int x, xv;                          // x: current value += vx : new value 
+    int x, xv;                                  // x: current value += vx : new value 
     int y, yv;
     int z, zv;
-    int pan, panv;
-    int tilt, tiltv;
-    int rol;
+    int pan, panv;                              // horizontal rotation
+    int tilt, tiltv;                            // vertical rotation
+    int rol;                                    // lateral rotation
 
-    VECTOR pos;
-    SVECTOR rot;
-    SVECTOR dvs;
+    VECTOR pos;                                 // camera current pos vector
+    SVECTOR rot;                                // camera current rot vector
 
     MATRIX mat;
 } CAMERA;
@@ -112,38 +100,26 @@ int main() {
 		
 	int		i;
 	
-	long	t, p, OTz, Flag;                // t == vertex count, p == depth cueing interpolation value, OTz ==  value to create Z-ordered OT, Flag == see LibOver47.pdf, p.143
+	long	t, p, OTz, Flag;                        // t == vertex count, p == depth cueing interpolation value, OTz ==  value to create Z-ordered OT, Flag == see LibOver47.pdf, p.143
 	
-    POLY_GT3 * poly;                           // pointer to a POLY_G4 
+    POLY_GT3 * poly;                                // pointer to a POLY_GT3 
 
-    SVECTOR RotVector = {0, 0, 0};                  // Initialize rotation vector {x, y, z}
-    VECTOR  MovVector = {0, 50, 50, 0}; 
-    MATRIX  PolyMatrix = {0};
+    MATRIX  PolyMatrix = {0};                       // global transformation matrix
     
+    CVECTOR outCol, outCol1, outCol2 = {0,0,0,0};   // Holds vertices colors with depth cueing applied
     
-    CVECTOR outCol ={0,0,0,0};
-    CVECTOR outCol1 ={0,0,0,0};
-    CVECTOR outCol2 ={0,0,0,0};
-    
-    // Texture window
-    
-    //~ DR_MODE * dr_mode;                        // Pointer to dr_mode prim
-    
-    //~ RECT tws = {0, 0, 32, 32};            // Texture window coordinates : x, y, w, h
-           
 	init();
 
-    VSyncCallback(callback);
+    VSyncCallback(callback);                        // pad is read on vsync callback
     
-    //~ SetBackColor(255 , 255, 255);
-    SetFarColor(20, 20, 40);
-    SetFogNearFar(1200, 3000,SCREENXRES);
+    SetFarColor(20, 20, 40);                        // vertices colors are mixed with farcolor depending on p value
+    SetFogNearFar(1200, 3000,SCREENXRES);           // fog distance thresholds 
     
     for (int k = 0; k < sizeof(meshes)/sizeof(TMESH *); k++){
-        LoadTexture(meshes[k]->tim_data, meshes[k]->tim);
+        LoadTexture(meshes[k]->tim_data, meshes[k]->tim);       
     }
-    
-    // Set Camera starting pos
+
+    // Set Camera starting pos and rot
     
     camera.xv = -ONE * -89;
     camera.yv = -ONE * 59;
@@ -160,26 +136,14 @@ int main() {
         
         // Local Transform
         
-        meshes[2]->rot->vy -= 28;
-        meshes[1]->rot->vy += 28;
-        //~ meshes[1]->rot->vz += 8;
-        //~ meshes[1]->rot->vx += 2;
+        meshes[2]->rot->vy -= 28;   // rotate small cube
+        meshes[1]->rot->vy += 28;   // rotate blue monolith thingy
         
         
         //World Translations
         
-        meshes[1]->pos->vz = meshes[1]->pos->vz + (pcos[VSync(-1)%1024]/768 );
-        meshes[1]->pos->vx = meshes[1]->pos->vx + (psin[VSync(-1)%1024]/768 );
-        //~ meshes[1]->pos->vz = pcos[VSync(-1)%4096] / 4096;
-        //~ meshes[1]->pos->vx =  psin[VSync(-1)%4096] / 4096;
-        //~ meshes[1]->pos->vx = 0;
-        //~ meshes[1]->pos->vz = 100;
-        //~ meshes[1]->rot->vy ++;
-        
-        
-        //~ if (!(VSync(-1)%2)){
-            //~ meshes[1]->pos->vy = pcos[VSync(-1)%ONE] * psin[VSync(-1)%ONE] / ONE / 128;
-        //~ }
+        meshes[1]->pos->vz = meshes[1]->pos->vz + (pcos[VSync(-1)%1024]/768 ); // move blue monolith thingy
+        meshes[1]->pos->vx = meshes[1]->pos->vx + (psin[VSync(-1)%1024]/768 );        
         
         // Camera setup 
         
@@ -204,18 +168,20 @@ int main() {
             for (i = 0; i < (meshes[k]->tmesh->len * 3); i += 3) {               
                 
                 poly = (POLY_GT3 *)nextpri;
-                // Initialize the primitive and set its color values
                 
-                RotMatrix(meshes[k]->rot, meshes[k]->mat);           // Apply rotation matrix
-
-                TransMatrix(meshes[k]->mat, meshes[k]->pos);         // Apply translation matrix
-                CompMatrixLV(&camera.mat, meshes[k]->mat, &PolyMatrix);
-
                 
-                SetRotMatrix(&PolyMatrix);                    // Set default rotation matrix
-                SetTransMatrix(&PolyMatrix);
+                
+                RotMatrix(meshes[k]->rot, meshes[k]->mat);                  // Apply mesh rotation to matrix 
 
-                //~ applyOrbCam(meshes[1]);
+                TransMatrix(meshes[k]->mat, meshes[k]->pos);                // Apply mesh translation to matrix 
+                
+                CompMatrixLV(&camera.mat, meshes[k]->mat, &PolyMatrix);     // Make a composite matrix from cam matrix + meshes matrices
+                
+                SetRotMatrix(&PolyMatrix);                                   // Set rotation matrix
+                
+                SetTransMatrix(&PolyMatrix);                                 // Set Transmatrix matrix
+
+                // Draw meshes
 
                 SetPolyGT3(poly);
                 
@@ -227,14 +193,12 @@ int main() {
                 setRGB1(poly, outCol1.r, outCol1.g, outCol1.b);
                 setRGB2(poly, outCol2.r, outCol2.g, outCol2.b);
                                 
-                
-                                                    
-                // The TIMs are loaded in vram vertically on the same TPAGE; eg. Tim1 640,0, Tim1 640, 128
-                // We then add tim_image.prect.y to the y coord of the uvs to use the correct texture.
+
+                // WIP : Trying to use the draw area as a texture to create pseudo refraction effect
                 if (*meshes[k]->isPrism){ 
                     ((POLY_GT3 *)poly)->tpage = getTPage(meshes[k]->tim->mode&0x3, 0,
-                                                         0,
-                                                         256
+                                                         0,                                 
+                                                         320
                     );
                     setUV3(poly, 32, 32,
                                  32, 220,
@@ -251,6 +215,7 @@ int main() {
                                   meshes[k]->tmesh->u[i+1].vx, meshes[k]->tmesh->u[i+1].vy + meshes[k]->tim->prect->y,
                                   meshes[k]->tmesh->u[i+2].vx, meshes[k]->tmesh->u[i+2].vy + meshes[k]->tim->prect->y);
                 //~ }
+                
                 // Rotate, translate, and project the vectors and output the results into a primitive
 
                 OTz  = RotTransPers(&meshes[k]->tmesh->v[meshes[k]->index[t]]  , (long*)&poly->x0, meshes[k]->p, &Flag);                
@@ -263,7 +228,7 @@ int main() {
                         //~ &meshes[k]->tmesh->v[meshes[k]->index[t+1]],
                         //~ &meshes[k]->tmesh->v[meshes[k]->index[t+2]],
                         //~ (long*)&poly->x0, (long*)&poly->x1, (long*)&poly->x2,
-                        //~ &p,
+                        //~ meshes[k]->p,
                         //~ &Flag
                         //~ );
                 
@@ -277,23 +242,7 @@ int main() {
                 t+=3;
             }
         }
-        
-        // Can we use texture window with UV mapping ?
-        
-        //~ dr_mode = (DR_MODE *)nextpri;
-        
-        //~ setDrawMode(dr_mode,1,0, getTPage(tim_cube.mode&0x3, 0,
-                                          //~ tim_cube.prect->x,
-                                          //~ tim_cube.prect->y), &tws);  //set texture window
-    
-        //~ AddPrim(&ot[db], dr_mode);
-        
-        //~ nextpri += sizeof(DR_MODE);
-        
-        
-        
-        // Render the banner (FntPrint is always on top because it is not part of the OT)
-        
+                
 		//~ FntPrint("BASED ON PRIMDRAW BY LAMEGUY64, 2014 \n");
 		FntPrint("#Tris :%d \n", sizeof(ot[db])/sizeof(POLY_GT3));
 		FntPrint("Vsync :%d \n", VSync(0));	
@@ -308,8 +257,6 @@ int main() {
         FntFlush(-1);
 		
 		display();
-
-        //~ frame = VSync(-1);
 
 	}
     return 0;
@@ -384,27 +331,6 @@ void applyCamera(CAMERA * cam){
     
     SetRotMatrix(&cam->mat);                            // Set Rotation matrix
     SetTransMatrix(&cam->mat);                          // Set Transform matrix
-}
-
-void applyOrbCam(MESH * mesh){
-    
-    MATRIX mat;
-    
-    RotMatrix(mesh->rot, mesh->mat);           // Apply rotation matrix
-    TransMatrix(mesh->mat, mesh->pos);         // Apply translation matrix
-
-    CompMatrixLV(&camera.mat, mesh->mat, &mat);
-    
-    SetRotMatrix(&mat);                    // Set default rotation matrix
-    SetTransMatrix(&mat);                         // Set Transform matrix
-    
-    //~ RotMatrix(meshes[k]->rot, meshes[k]->mat);           // Apply rotation matrix
-    //~ TransMatrix(meshes[k]->mat, meshes[k]->pos);         // Apply translation matrix
-
-    //~ CompMatrixLV(&camera.mat, meshes[k]->mat, &PolyMatrix);
-    
-    //~ SetRotMatrix(&PolyMatrix);                    // Set default rotation matrix
-    //~ SetTransMatrix(&PolyMatrix);
 }
 
 void LoadTexture(u_long * tim, TIM_IMAGE * tparam){     // This part is from Lameguy64's tutorial series : lameguy64.net/svn/pstutorials/chapter1/3-textures.html login/pw: annoyingmous
