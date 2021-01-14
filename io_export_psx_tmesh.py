@@ -45,6 +45,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         scale = 200
         f = open(os.path.normpath(self.filepath),"w+")
         
+        # write BODY struct def
+        f.write("typedef struct {\n" +
+                "\tVECTOR  position;\n" +
+                "\tSVECTOR velocity;\n" +
+                "\tint     mass;\n" +
+                "\tVECTOR  min; \n" +
+                "\tVECTOR  max; \n" +
+                "\t} BODY;\n\n")
+        
         # write typedef struct
         f.write("typedef struct {  \n"+
                 "\tTMESH   *    tmesh;\n" +
@@ -54,6 +63,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tMATRIX  *    mat;\n" + 
                 "\tVECTOR  *    pos;\n" + 
                 "\tSVECTOR *    rot;\n" +
+                "\tshort   *    isRigidBody;\n" +
                 "\tshort   *    isPrism;\n" +
                 "\tlong    *    p;\n" + 
                 "\t} MESH;\n\n")
@@ -61,11 +71,27 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         for m in bpy.data.meshes:
  
             # Write vertices vectors
+            
+            # AABB : Store vertices coordinates by axis
+            Xvals = []
+            Yvals = []
+            Zvals = []
  
-            f.write("SVECTOR "+"model"+m.name+"_mesh[] = {\n")
+            # remove '.' from mesh name
+            cleanName = m.name.replace('.','_')
+
+ 
+            f.write("SVECTOR "+"model"+cleanName+"_mesh[] = {\n")
             for i in range(len(m.vertices)):
                 v = m.vertices[i].co
+                
+                # AABB : append vertices coords by axis
+                Xvals.append(v.x)
+                Yvals.append(v.y)
+                Zvals.append(v.z)
+                
                 f.write("\t{"+str(v.x*scale)+","+str(v.y*scale)+","+str(v.z*scale)+"}")
+                
                 if i != len(m.vertices) - 1:
                     f.write(",")
                 f.write("\n")
@@ -73,7 +99,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Write normals vectors
  
-            f.write("SVECTOR "+"model"+m.name+"_normal[] = {\n")
+            f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
             for i in range(len(m.polygons)):
                 poly = m.polygons[i]
                 f.write("\t"+str(poly.normal.x)+","+str(poly.normal.y)+","+str(poly.normal.z)+",0")
@@ -95,7 +121,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if len(m.uv_textures) != 0:
                 for t in range(len(m.uv_textures)):
                     if m.uv_textures[t].data[0].image != None:
-                        f.write("SVECTOR "+"model"+m.name+"_uv[] = {\n")
+                        f.write("SVECTOR "+"model"+cleanName+"_uv[] = {\n")
                         texture_image = m.uv_textures[t].data[0].image
                         tex_width = texture_image.size[0]
                         tex_height = texture_image.size[1]
@@ -112,7 +138,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
              
             # Write vertex colors vectors
  
-            f.write("CVECTOR "+"model"+m.name+"_color[] = {\n") 
+            f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n") 
             # If vertex colors exist, use them
             if len(m.vertex_colors) != 0:           
                 colors = m.vertex_colors[0].data
@@ -134,7 +160,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("};\n\n")
             
             # Write polygons index
-            f.write("int "+"model"+m.name+"_index[] = {\n")
+            f.write("int "+"model"+cleanName+"_index[] = {\n")
             for i in range(len(m.polygons)):
                 poly = m.polygons[i]
                 f.write("\t"+str(poly.vertices[0])+","+str(poly.vertices[1])+","+str(poly.vertices[2]))
@@ -144,26 +170,34 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("};\n\n")
  
             #write object matrix, rot and pos vectors
-            f.write("MATRIX model"+m.name+"_matrix = {0};\n" +
-                    "VECTOR model"+m.name+"_pos    = {"+ str(bpy.data.objects[m.name].location.x * 100) + "," + str(bpy.data.objects[m.name].location.y * 100) + "," + str(bpy.data.objects[m.name].location.z * 100) + ", 0};\n" +
-                    "SVECTOR model"+m.name+"_rot   = {"+ str(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.z)/360 * 4096) + "};\n" +
-                    "short model"+m.name+"_isPrism = 0;\n" +
-                    "long model"+m.name+"_p = 0;\n" +
-                    "\n")
+            f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
+                    "VECTOR model"+cleanName+"_pos    = {"+ str(bpy.data.objects[m.name].location.x * 100) + "," + str(bpy.data.objects[m.name].location.y * 100) + "," + str(bpy.data.objects[m.name].location.z * 100) + ", 0};\n" +
+                    "SVECTOR model"+cleanName+"_rot   = {"+ str(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096) + "," + str(degrees(bpy.data.objects[m.name].rotation_euler.z)/360 * 4096) + "};\n" +
+                    "short model"+cleanName+"_isRigidBody = 0;\n" +
+                    "short model"+cleanName+"_isPrism = 0;\n" +
+                    "long model"+cleanName+"_p = 0;\n" +
+                    "BODY model"+cleanName+"_body = {\n" +
+                    "\t0, 0, 0, 0,\n" +
+                    "\t0, 0, 0, 0,\n" +
+                    "\t1,\n" +
+                    # write min and max values of AABBs on each axis
+                    "\t" + str(min(Xvals) * scale) + "," + str(min(Yvals) * scale) + "," + str(min(Zvals) * scale) + ", 0,\n" +
+                    "\t" + str(max(Xvals) * scale) + "," + str(max(Yvals) * scale) + "," + str(max(Zvals) * scale) + ", 0,\n" +
+                    "\t};\n\n")
  
             # Write TMESH struct
-            f.write("TMESH "+"model"+m.name+" = {\n")
-            f.write("\t"+"model"+m.name+"_mesh,  \n")
-            f.write("\t"+"model"+m.name+"_normal,\n")
+            f.write("TMESH "+"model"+cleanName+" = {\n")
+            f.write("\t"+"model"+cleanName+"_mesh,  \n")
+            f.write("\t"+"model"+cleanName+"_normal,\n")
             
             if len(m.uv_textures) != 0:
                 for t in range(len(m.uv_textures)):
                     if m.uv_textures[0].data[0].image != None:
-                        f.write("\t"+"model"+m.name+"_uv,\n")
+                        f.write("\t"+"model"+cleanName+"_uv,\n")
             else:
                 f.write("\t0,\n")
             
-            f.write("\t"+"model"+m.name+"_color, \n")
+            f.write("\t"+"model"+cleanName+"_color, \n")
             
             # According to libgte.h, TMESH.len should be # of vertices. Meh...
             f.write("\t"+str(len(m.polygons))+"\n")
@@ -182,9 +216,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
                         f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
                 
-            f.write("MESH mesh"+m.name+" = {\n")
-            f.write("\t&model"+ m.name +",\n")
-            f.write("\tmodel" + m.name + "_index,\n")
+            f.write("MESH mesh"+cleanName+" = {\n")
+            f.write("\t&model"+ cleanName +",\n")
+            f.write("\tmodel" + cleanName + "_index,\n")
             
             if len(m.uv_textures) != 0:
                 for t in range(len(m.uv_textures)):
@@ -194,18 +228,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             else:
                 f.write("\t0,\n" +
                         "\t0,\n")            
-            f.write("\t&model"+m.name+"_matrix,\n" +
-                    "\t&model"+m.name+"_pos,\n" +
-                    "\t&model"+m.name+"_rot,\n" +
-                    "\t&model"+m.name+"_isPrism,\n" +
-                    "\t&model"+m.name+"_p\n")
+            f.write("\t&model"+cleanName+"_matrix,\n" +
+                    "\t&model"+cleanName+"_pos,\n" +
+                    "\t&model"+cleanName+"_rot,\n" +
+                    "\t&model"+cleanName+"_isRigidBody,\n" +
+                    "\t&model"+cleanName+"_isPrism,\n" +
+                    "\t&model"+cleanName+"_p\n")
                     
                     
             f.write("};\n\n")
 
         f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
         for k in range(len(bpy.data.meshes)): 
-            f.write("\t&mesh" + bpy.data.meshes[k].name)
+            f.write("\t&mesh" + bpy.data.meshes[k].name.replace('.','_'))
             if k != len(bpy.data.meshes) - 1:
                 f.write(",\n")
         f.write("\n}; \n")
