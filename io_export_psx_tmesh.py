@@ -14,8 +14,10 @@ bl_info = {
 
 import os
 import bpy
+import bmesh
 import unicodedata
-from math import radians
+from math import radians, degrees, floor, cos, sin 
+from mathutils import Vector
 
 from bpy.props import (CollectionProperty,
                        StringProperty,
@@ -54,9 +56,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     )
     
     def execute(self, context):
-        import bmesh
-        from math import degrees, floor, cos, sin
-        from mathutils import Vector
+
         
         def triangulate_object(obj): # Stolen from here : https://blender.stackexchange.com/questions/45698/triangulate-mesh-in-python/45722#45722
             me = obj.data
@@ -98,7 +98,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         dirpath = os.path.join(folder, "TIM")
         
         camAngles = []
-        
+        defaultCam = 'NULL'
+
         # if using precalculated BG, render and export them to ./TIM/
         if self.exp_Precalc:
             
@@ -119,7 +120,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # ~ originRot = cam.rotation_euler 
             
             for o in bpy.data.objects:
-                
+                if o.type == 'CAMERA' and o.data.get('isDefault'):
+                    defaultCam = o.name
+                    
                 if o.type == 'CAMERA' and o.name.startswith("camPath"):
                     
                     # set cam as active - could be useful if multiple cam are present
@@ -217,7 +220,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\t} CAMPATH;\n\n")
 
         camPathPoints = []
-        defaultCam = 'NULL'
         
         first_mesh = CleanName(bpy.data.meshes[0].name)
 
@@ -325,6 +327,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         levelPtr = first_mesh
         propPtr = first_mesh
         
+        timList = []
+        
         for m in bpy.data.meshes:
  
             # Write vertices vectors
@@ -390,10 +394,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             u = uv_layer[i].uv
                             ux = u.x * tex_width
                             uy = u.y * tex_height
-                            if self.exp_Precalc and m.get('isBG'):
-                                f.write("\t255, 255, 0, 0") # Clamp values to 0-255 to avoid tpage overflow
-                            else:
-                                f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
+                            # ~ if self.exp_Precalc and m.get('isBG'):
+                                # ~ f.write("\t255, 255, 0, 0") # Clamp values to 0-255 to avoid tpage overflow
+                            # ~ else:
+                            f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
                             if i != len(uv_layer) - 1:
                                 f.write(",")
                             f.write("\n")
@@ -462,6 +466,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 if m.get(prop) is not None:
                     chkProp[prop] = m[prop]
             
+            # put isBG back to 0 if using precalculated BGs
+            if not self.exp_Precalc:
+                chkProp['isBG'] = 0;
+            
             if m.get('isActor'):
                 actorPtr = cleanName
             
@@ -485,9 +493,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 nFrame = frame_end - frame_start
                 
-                # ~ f.write("int "+"model"+cleanName+"_anim_nframes = " + str(nFrame) + ";\n")
-                # ~ f.write("int "+"model"+cleanName+"_anim_nvert = {" + str(len(nm.vertices)) + "};")
-                # ~ f.write("SVECTOR "+"model"+cleanName+"_anim_data[") 
                 c = 0;
                 
                 tmp_meshes = []
@@ -528,50 +533,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 for nm in tmp_meshes:
                     bpy.data.meshes.remove(nm)
                 
-                # ~ c = 0
-
-                # ~ tmp_meshes_n = []
-
-                # ~ for i in range(frame_start - 1, frame_end):
-                    
-                    
-                    
-                    # ~ bpy.context.scene.frame_set(i)
-                    # ~ bpy.context.scene.update()
-
-                    # ~ nm_n = o.to_mesh(bpy.context.scene, True, 'PREVIEW')
-                    
-                    # ~ if i == 0 :
-                        # ~ f.write("\t{\n")
-    
-                    # ~ for v in range(len(nm_n.vertices)):
-                        
-                        # ~ poly = m.polygons[v]
-                        
-                        # ~ if v == 0:
-                            # ~ f.write("\t\t//Frame %d\n" % i)
-                        # ~ f.write("\t\t{ " + str(round(-poly.normal.x * 4096)) + "," + str(round(poly.normal.z  * 4096)) + "," + str(round(-poly.normal.y * 4096) ) + ",0 }")
-                                                
-                        # ~ if c != len(nm_n.vertices) * (nFrame + 1) * 3 - 3:
-                            # ~ f.write(",\n")
-                        # ~ if v == len(nm_n.vertices) - 1:
-                            # ~ f.write("\n")
-                        # ~ c += 3;
-                    
-                    # ~ tmp_meshes_n.append(nm_n)
-                # ~ f.write("\t\n}\n};\n")
-        
-                
-                # ~ for nm_n in tmp_meshes_n:
-                    # ~ bpy.data.meshes.remove(nm_n)
-            
-                
             #Stuff # ~ bpy.data.objects[bpy.data.meshes[0].name].active_shape_key.value : access shape_key
             
             #write object matrix, rot and pos vectors
             f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
                     "VECTOR model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
-                    "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
+                    "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
                     "short model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
                     "short model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
                     "short model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
@@ -616,18 +583,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # write texture binary name and declare TIM_IMAGE
             # by default, load the file from the TIM folder
             # ~ if len(m.uv_textures) != 0:
+            
             if len(m.uv_textures) != None:
                 for t in range(len(m.uv_textures)): 
                     if m.uv_textures[0].data[0].image != None:
+                        
                         tex_name = texture_image.name
                         prefix   = str.partition(tex_name, ".")[0].replace('-','_')
                         prefix   = CleanName(prefix)
-                        
-                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
-                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
-                        f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
-                        f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
-                
+                        # add Tex name to array if !exist
+                        if prefix in timList:
+                            break
+                        else:
+                            
+                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+                            f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
+                            
+                            timList.append(prefix)
+
             f.write("MESH mesh"+cleanName+" = {\n")
             f.write("\t&model"+ cleanName +",\n")
             f.write("\tmodel" + cleanName + "_index,\n")
@@ -635,6 +610,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if len(m.uv_textures) != None:
                 for t in range(len(m.uv_textures)):
                     if m.uv_textures[0].data[0].image != None:
+                        
+                        tex_name = texture_image.name
+                        prefix   = str.partition(tex_name, ".")[0].replace('-','_')
+                        prefix   = CleanName(prefix)
+                        
                         f.write("\t&tim_"+ prefix + ",\n")
                         f.write("\t_binary_TIM_" + prefix + "_tim_start,\n")
                     else:
@@ -666,10 +646,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
         for k in range(len(bpy.data.meshes)):
+
             cleanName = CleanName(bpy.data.meshes[k].name)
-            # ~ cleanName = bpy.data.meshes[k].name.replace('.','_')
-            # ~ cleanName = unicodedata.normalize('NFKD',cleanName).encode('ASCII', 'ignore').decode() 
             f.write("\t&mesh" + cleanName)
+
             if k != len(bpy.data.meshes) - 1:
                 f.write(",\n")
         f.write("\n}; \n")
@@ -713,11 +693,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("MESH * levelPtr = &mesh" + levelPtr + ";\n")
         f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
         
-        # ~ if self.exp_Precalc:
         f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
-        # ~ else :
-            # ~ f.write("CAMPOS * camPtr =  &camPos_" + CleanName(defaultCam) + ";\n\n")
-        
+
+        # set default cam back
+        if defaultCam != 'NULL':
+            bpy.context.scene.camera = bpy.data.objects[defaultCam]
+
         f.close()
         return {'FINISHED'};
  
