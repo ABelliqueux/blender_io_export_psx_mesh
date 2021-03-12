@@ -57,7 +57,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
     def execute(self, context):
 
-        
         def triangulate_object(obj): # Stolen from here : https://blender.stackexchange.com/questions/45698/triangulate-mesh-in-python/45722#45722
             me = obj.data
             # Get a BMesh representation
@@ -74,7 +73,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             name = name.replace('.','_')
             name = unicodedata.normalize('NFKD',name).encode('ASCII', 'ignore').decode()
             return name
-            
+
         # Leave edit mode to avoid errors
         bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -158,7 +157,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tVECTOR  max; \n" +
                 "\tint     restitution; \n" +
                 "\t} BODY;\n\n")
-                
+        
         # VERTEX ANIM struct
         f.write("typedef struct { \n" +
                 "\tint nframes;    // number of frames e.g   20\n" +
@@ -218,6 +217,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tshort len, cursor, pos;\n" +
                 "\tVECTOR points[];\n" +
                 "\t} CAMPATH;\n\n")
+
+        # NODE struc
+        f.Write("typedef struct {\n" +
+                "\tMESH * curPlane;\n" +
+                "\tMESH * siblings[];" +
+                "\tMESH * objects[];" +
+                "\t} NODE;\n\n")
 
         camPathPoints = []
         
@@ -326,6 +332,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         actorPtr = first_mesh
         levelPtr = first_mesh
         propPtr = first_mesh
+        nodePtr = first_mesh
         
         timList = []
         
@@ -479,6 +486,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if m.get('isProp'):
                 propPtr = cleanName
             
+            if m.get('isLevel'):
+                nodePtr = cleanName
             # write vertex anim if isAnim != 0 # https://stackoverflow.com/questions/9138637/vertex-animation-exporter-for-blender
             if m.get("isAnim") is not None and m["isAnim"] != 0:
                 
@@ -694,6 +703,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
         
         f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
+
+        f.write("NODE * curNode =  &node_" + nodePtr + ";\n\n")
 
         # set default cam back
         if defaultCam != 'NULL':
