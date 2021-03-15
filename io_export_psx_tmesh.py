@@ -1235,31 +1235,41 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "\t" + str(len(PlanesObjects[p]['siblings'])) + ",\n" +
                     "\t{\n")
             
-            for side in PlanesObjects[p]['siblings']:
-                
-                for sibling in PlanesObjects[p]['siblings'][side]:
+            if 'siblings' in PlanesObjects[p]:
             
-                    f.write("\t\t&mesh" + CleanName(sibling) + ",\n")
+                for side in PlanesObjects[p]['siblings']:
                     
+                    for sibling in PlanesObjects[p]['siblings'][side]:
+                
+                        f.write("\t\t&mesh" + CleanName(sibling) + ",\n")
+            
+            else:
+                f.write("0,\n")
+            
             f.write("\t}\n" +
                     "};\n\n")
             
             # Write CHILDNODE structure
             
-            ## TODO : if objects is not none 
+            f.write("CHILDNODE node" + pName + "_objects = {\n")
             
-            f.write("CHILDNODE node" + pName + "_objects = {\n" + 
-                    "\t" + str(len(PlanesObjects[p]['objects'])) + ",\n" +
-                    "\t{\n")
+            if 'objects' in PlanesObjects[p]:
             
-            for obj in PlanesObjects[p]['objects']:
-                
-                f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
+                f.write("\t" + str(len(PlanesObjects[p]['objects'])) + ",\n" +
+                        "\t{\n")
+            
+                for obj in PlanesObjects[p]['objects']:
                     
+                    f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
+                    
+            else: 
+                
+                f.write("\t0,\n" + 
+                        "\t{\n\t0\n")
+            
             f.write("\t}\n" +
                     "};\n\n")
                     
-            
             # Write NODE structure
                     
             f.write( "NODE node" + pName + " = {\n" +
@@ -1267,26 +1277,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      "\t&node" + pName + "_siblings,\n" +
                      "\t&node" + pName + "_objects\n" +
                      "};\n\n" )
-       
-       
-                     # ~ "\t{\n")
-            
-            # ~ for side in PlanesObjects[p]['siblings']:
-                
-                # ~ for sibling in PlanesObjects[p]['siblings'][side]:
-                    
-                    # ~ f.write( "\t\t&node" + CleanName(sibling) + ",\n" )
-                
-            # ~ f.write( "\t},\n" + 
-                     # ~ "\t{\n" )
-            
-            # ~ for obj in PlanesObjects[p]['objects']:
-                
-                # ~ f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
-            
-            
-            # ~ f.write( "\t}\n" + 
-                     # ~ "};\n\n")
 
         f.write("NODE * curNode =  &node" + nodePtr + ";\n\n")
 
