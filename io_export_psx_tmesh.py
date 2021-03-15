@@ -203,7 +203,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
             elif ( (val1 == 0) and (val2 == 0) ):
                 
-                return "same"
+                return "connected"
                 
             elif ( 
                     ( (val1>0) and (val2==0) ) or 
@@ -389,12 +389,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tVECTOR points[];\n" +
                 "\t} CAMPATH;\n\n")
 
-        # NODE
+        # PARENTNODE
         
         f.write("typedef struct {\n" +
-                "\tMESH * curPlane;\n" +
+                "\tint index;\n" +
                 "\tMESH * siblings[];\n" +
-                "\tMESH * objects[];\n" +
+                "\t} PARENTNODE ;\n\n")
+    
+        # CHILDNODE
+
+        f.write("typedef struct {\n" +
+                "\tint index;\n" +
+                "\tMESH * children[];\n" + 
+                "\t} CHILDNODE ;\n\n")
+        
+        # NODE
+
+        f.write("typedef struct {\n" +
+                "\tMESH * curPlane;\n" +
+                "\tPARENTNODE * siblings;\n" + 
+                "\tCHILDNODE * objects;\n" + 
                 "\t} NODE;\n\n")
 
     ## Camera setup
@@ -1037,6 +1051,242 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
         
         f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
+
+        
+    ## Spatial Partitioning
+    
+        # ToDo :
+        # Auto-detect which plane the actor is on and set that as curNode
+    
+        # Planes in the level ( define by 'isLevel' data property for now )
+
+        LvlPlanes = {}
+
+        # Objects in the level
+
+        LvlObjects = {}
+
+        # Link objects to their respective plane
+
+        PlanesObjects = defaultdict(dict)
+
+        # Store XY1, XY2 values
+
+        Xvalues = []
+
+        Yvalues = []
+
+        # Find planes and objects bounding boxes
+        
+        # Planes first
+        
+        for o in bpy.data.objects:
+        
+            # Only loop through meshes
+        
+            if o.type == 'MESH':
+        
+                # Get Level planes coordinates
+        
+                if o.data.get('isLevel'):
+                   
+                    # World matrix is used to convert local to global coordinates
+                    
+                    mw = o.matrix_world
+                   
+                    for v in bpy.data.objects[o.name].data.vertices:
+                   
+                        # Convert local to global coords
+                        
+                        Xvalues.append( (mw * v.co).x )
+                   
+                        Yvalues.append( (mw * v.co).y )
+                   
+                    LvlPlanes[o.name] = {'x1' : min(Xvalues),
+                                         'y1' : min(Yvalues),
+                                         'x2' : max(Xvalues),
+                                         'y2' : max(Yvalues)}
+                                         
+                    # Clear X/Y lists for next iteration
+                    
+                    Xvalues = []
+                   
+                    Yvalues = []
+                
+                # For each object not a plane and not actor, get its coordinates
+                
+                if not o.data.get('isLevel') and not o.data.get('isActor') :
+                    
+                    # World matrix is used to convert local to global coordinates
+                    
+                    mw = o.matrix_world
+                    
+                    for v in bpy.data.objects[o.name].data.vertices:
+                    
+                        # Convert local to global coords
+                    
+                        Xvalues.append( (mw * v.co).x )
+                    
+                        Yvalues.append( (mw * v.co).y )
+                    
+                    LvlObjects[o.name] = {'x1' : min(Xvalues),
+                                          'y1' : min(Yvalues),
+                                          'x2' : max(Xvalues),
+                                          'y2' : max(Yvalues)}
+
+                    # Clear X/Y lists for next iteration
+
+                    Xvalues = []
+
+                    Yvalues = []
+
+        
+        # Sides of the plane to check
+
+        checkSides = [ 
+                       ['N','S'], 
+                       ['S','N'], 
+                       ['W','E'], 
+                       ['E','W'] 
+                     ]
+
+
+        # Generate a dict : 
+        
+        # ~ { 
+        # ~     'S' : [] 
+        # ~     'N' : [] list of planes connected to this plane, and side they're on
+        # ~     'W' : [] 
+        # ~     'E' : []
+        # ~     'objects' : [] list of objects on this plane
+        # ~     ''
+        # ~ }
+
+        for p in LvlPlanes:
+            
+            # Find objects on plane
+            
+            for o in LvlObjects:
+                
+                # If object is above plane ..
+                
+                if isInPlane(p, o) == 1:
+                
+                    # .. add this object to the plane's list
+                
+                    if 'objects' in PlanesObjects[p]:
+                
+                        PlanesObjects[p]['objects'].append(o)
+                
+                    else:
+                
+                        PlanesObjects[p] = { 'objects' : [o] }
+            
+            # Find surrounding planes
+            
+            for op in LvlPlanes:
+                
+                # Loop on other planes
+                
+                if op is not p:
+                    
+                    # Check each side
+                    
+                    for s in checkSides:
+                    
+                        # If connected ('connected') plane exists...
+                    
+                        if checkLine(
+                    
+                            getSepLine(p, s[0])[0],
+                            getSepLine(p, s[0])[1],
+                            getSepLine(p, s[0])[2],
+                            getSepLine(p, s[0])[3],
+                            
+                            getSepLine(op, s[1])[0],
+                            getSepLine(op, s[1])[1],
+                            getSepLine(op, s[1])[2],
+                            getSepLine(op, s[1])[3]
+                    
+                             ) == 'connected':
+                            
+                            # ... add it to the list
+                            
+                            if 'siblings' not in PlanesObjects[p]:
+                                
+                                PlanesObjects[p]['siblings'] = {}
+                            
+                            # If more than one plane is connected on the same side of the plane, 
+                            # add it to the corresponding list    
+                            
+                            if s[0] in PlanesObjects[p]['siblings']:
+                            
+                                PlanesObjects[p]['siblings'][s[0]].append(op)
+                            
+                            else:
+                            
+                                PlanesObjects[p]['siblings'][s[0]] = [op]
+               
+            pName = CleanName(p)
+            
+            # Write PARENTNODE structure
+            
+            f.write("PARENTNODE node" + pName + "_siblings = {\n" + 
+                    "\t" + str(len(PlanesObjects[p]['siblings'])) + ",\n" +
+                    "\t{\n")
+            
+            for side in PlanesObjects[p]['siblings']:
+                
+                for sibling in PlanesObjects[p]['siblings'][side]:
+            
+                    f.write("\t\t&mesh" + CleanName(sibling) + ",\n")
+                    
+            f.write("\t}\n" +
+                    "};\n\n")
+            
+            # Write CHILDNODE structure
+            
+            ## TODO : if objects is not none 
+            
+            f.write("CHILDNODE node" + pName + "_objects = {\n" + 
+                    "\t" + str(len(PlanesObjects[p]['objects'])) + ",\n" +
+                    "\t{\n")
+            
+            for obj in PlanesObjects[p]['objects']:
+                
+                f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
+                    
+            f.write("\t}\n" +
+                    "};\n\n")
+                    
+            
+            # Write NODE structure
+                    
+            f.write( "NODE node" + pName + " = {\n" +
+                     "\t&mesh" + pName + ",\n" +
+                     "\t&node" + pName + "_siblings,\n" +
+                     "\t&node" + pName + "_objects\n" +
+                     "};\n\n" )
+       
+       
+                     # ~ "\t{\n")
+            
+            # ~ for side in PlanesObjects[p]['siblings']:
+                
+                # ~ for sibling in PlanesObjects[p]['siblings'][side]:
+                    
+                    # ~ f.write( "\t\t&node" + CleanName(sibling) + ",\n" )
+                
+            # ~ f.write( "\t},\n" + 
+                     # ~ "\t{\n" )
+            
+            # ~ for obj in PlanesObjects[p]['objects']:
+                
+                # ~ f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
+            
+            
+            # ~ f.write( "\t}\n" + 
+                     # ~ "};\n\n")
 
         f.write("NODE * curNode =  &node" + nodePtr + ";\n\n")
 
