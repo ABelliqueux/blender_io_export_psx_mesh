@@ -364,6 +364,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tlong    *    OTz;\n" + 
                 "\tBODY    *    body;\n" + 
                 "\tVANIM   *    anim;\n" + 
+                "\tvoid    *    node;\n" + 
                 "\t} MESH;\n\n")
         
         # CAMPOS
@@ -745,7 +746,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 chkProp['isBG'] = 0;
             
             if m.get('isActor'):
-                actorPtr = cleanName
+                actorPtr = m.name
             
             if m.get('isLevel'):
                 levelPtr = cleanName
@@ -753,8 +754,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if m.get('isProp'):
                 propPtr = cleanName
             
-            if m.get('isLevel'):
-                nodePtr = cleanName
+            # ~ if m.get('isLevel'):
+                # ~ nodePtr = cleanName
     
     ## Vertex animation
                 
@@ -1044,7 +1045,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("};\n\n")
         
 
-        f.write("MESH * actorPtr = &mesh" + actorPtr + ";\n")
+        f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
         
         f.write("MESH * levelPtr = &mesh" + levelPtr + ";\n")
         
@@ -1058,17 +1059,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # ToDo :
         # Auto-detect which plane the actor is on and set that as curNode
     
-        # Planes in the level ( define by 'isLevel' data property for now )
+        # Planes in the level - dict of strings 
 
         LvlPlanes = {}
 
-        # Objects in the level
+        # Objects in the level  - dict of strings
 
         LvlObjects = {}
 
         # Link objects to their respective plane
 
-        PlanesObjects = defaultdict(dict)
+        PlanesObjects = defaultdict(dict) 
 
         # Store XY1, XY2 values
 
@@ -1113,14 +1114,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                    
                     Yvalues = []
                 
-                # For each object not a plane and not actor, get its coordinates
+                # For each object not a plane, get its coordinates
                 
-                if not o.data.get('isLevel') and not o.data.get('isActor') :
+                # ~ if not o.data.get('isLevel') and not o.data.get('isActor') :
+                if not o.data.get('isLevel'):
                     
                     # World matrix is used to convert local to global coordinates
                     
                     mw = o.matrix_world
-                    
+
                     for v in bpy.data.objects[o.name].data.vertices:
                     
                         # Convert local to global coords
@@ -1168,11 +1170,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             for o in LvlObjects:
                 
-                # If object is above plane ..
+                # If object is above plane
                 
                 if isInPlane(p, o) == 1:
                 
-                    # .. add this object to the plane's list
+                    # If actor is on this plane, use it as starting node
+                    
+                    if o == actorPtr:
+                        
+                        nodePtr = p
+                
+                        break
+                        
+                    # Add this object to the plane's list
                 
                     if 'objects' in PlanesObjects[p]:
                 
@@ -1231,8 +1241,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Write PARENTNODE structure
             
+            nSiblings = 0
+            
+            if 'S' in PlanesObjects[p]['siblings']: 
+            
+                nSiblings += len(PlanesObjects[p]['siblings']['S'])
+            
+            if 'N' in PlanesObjects[p]['siblings']: 
+                
+                nSiblings += len(PlanesObjects[p]['siblings']['N'])
+                
+            if 'E' in PlanesObjects[p]['siblings']: 
+                
+                nSiblings += len(PlanesObjects[p]['siblings']['E'])
+                
+            if 'W' in PlanesObjects[p]['siblings']: 
+                
+                nSiblings += len(PlanesObjects[p]['siblings']['W'])
+            
             f.write("PARENTNODE node" + pName + "_siblings = {\n" + 
-                    "\t" + str(len(PlanesObjects[p]['siblings'])) + ",\n" +
+                    "\t" + str(nSiblings) + ",\n" +
                     "\t{\n")
             
             if 'siblings' in PlanesObjects[p]:
