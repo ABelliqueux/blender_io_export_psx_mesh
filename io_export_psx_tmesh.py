@@ -310,9 +310,22 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
     ## Add C structures definitions
         
+        # Partial declaration of structures to avoid inter-dependencies issues
+        
+        f.write("struct BODY;\n" +
+                "struct VANIM;\n" +
+                "struct PRIM;\n" +
+                "struct MESH;\n" +
+                "struct CAMPOS;\n" +
+                "struct CAMPATH;\n" +
+                "struct CAMANGLE;\n" +
+                "struct SIBLINGS;\n" +
+                "struct CHILDREN;\n" +
+                "struct NODE;\n\n")
+        
         # BODY
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct BODY {\n" +
                 "\tVECTOR  gForce;\n" +
                 "\tVECTOR  position;\n" +
                 "\tSVECTOR velocity;\n" +
@@ -325,7 +338,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # VANIM
         
-        f.write("typedef struct { \n" +
+        f.write("typedef struct VANIM { \n" +
                 "\tint nframes;    // number of frames e.g   20\n" +
                 "\tint nvert;      // number of vertices e.g 21\n" +
                 "\tint cursor;     // anim cursor\n" +
@@ -338,14 +351,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
         # PRIM
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct PRIM {\n" +
                 "\tVECTOR order;\n" +
                 "\tint    code; // Same as POL3/POL4 codes : Code (F3 = 1, FT3 = 2, G3 = 3, GT3 = 4) Code (F4 = 5, FT4 = 6, G4 = 7, GT4 = 8)\n" +
                 "\t} PRIM;\n\n")
         
         # MESH
         
-        f.write("typedef struct {  \n"+
+        f.write("typedef struct MESH {  \n"+
                 "\tTMESH   *    tmesh;\n" +
                 "\tPRIM    *    index;\n" +
                 "\tTIM_IMAGE *  tim;  \n" + 
@@ -369,7 +382,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # CAMPOS
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct CAMPOS {\n" +
                 "\tVECTOR  pos;\n" +
                 "\tSVECTOR rot;\n" + 
                 "\t} CAMPOS;\n\n" +
@@ -377,7 +390,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # CAMANGLE
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct CAMANGLE {\n" +
                 "\tCAMPOS    * campos;\n" +
                 "\tTIM_IMAGE * BGtim;\n" +
                 "\tunsigned long * tim_data;\n" +
@@ -385,31 +398,31 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
         # CAMPATH
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct CAMPATH {\n" +
                 "\tshort len, cursor, pos;\n" +
                 "\tVECTOR points[];\n" +
                 "\t} CAMPATH;\n\n")
 
-        # PARENTNODE
+        # SIBLINGS
         
-        f.write("typedef struct {\n" +
+        f.write("typedef struct SIBLINGS {\n" +
                 "\tint index;\n" +
-                "\tMESH * siblings[];\n" +
-                "\t} PARENTNODE ;\n\n")
+                "\tstruct NODE * list[];\n" +
+                "\t} SIBLINGS ;\n\n")
     
-        # CHILDNODE
+        # CHILDREN
 
-        f.write("typedef struct {\n" +
+        f.write("typedef struct CHILDREN {\n" +
                 "\tint index;\n" +
-                "\tMESH * children[];\n" + 
-                "\t} CHILDNODE ;\n\n")
+                "\tMESH * list[];\n" + 
+                "\t} CHILDREN ;\n\n")
         
         # NODE
 
-        f.write("typedef struct {\n" +
-                "\tMESH * curPlane;\n" +
-                "\tPARENTNODE * siblings;\n" + 
-                "\tCHILDNODE * objects;\n" + 
+        f.write("typedef struct NODE {\n" +
+                "\tMESH * plane;\n" +
+                "\tSIBLINGS * siblings;\n" + 
+                "\tCHILDREN * objects;\n" + 
                 "\t} NODE;\n\n")
 
     ## Camera setup
@@ -1142,7 +1155,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                     Yvalues = []
 
+        # Declare LvlPlanes nodes to avoid declaration dependency issues
+            
+        # ~ f.write("NODE ")
         
+        for k in LvlPlanes.keys():
+            
+            f.write("NODE node" + CleanName(k) + ";\n\n")
+            
+            # ~ if k < len( LvlPlanes.keys() ) - 1:
+                
+                # ~ f.write(", ")
+            
+        # ~ f.write(";\n\n")    
+
         # Sides of the plane to check
 
         checkSides = [ 
@@ -1151,7 +1177,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                        ['W','E'], 
                        ['E','W'] 
                      ]
-
 
         # Generate a dict : 
         
@@ -1239,7 +1264,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                
             pName = CleanName(p)
             
-            # Write PARENTNODE structure
+            # Write SIBLINGS structure
             
             nSiblings = 0
             
@@ -1259,7 +1284,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 nSiblings += len(PlanesObjects[p]['siblings']['W'])
             
-            f.write("PARENTNODE node" + pName + "_siblings = {\n" + 
+            f.write("SIBLINGS node" + pName + "_siblings = {\n" + 
                     "\t" + str(nSiblings) + ",\n" +
                     "\t{\n")
             
@@ -1269,7 +1294,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     for sibling in PlanesObjects[p]['siblings'][side]:
                 
-                        f.write("\t\t&mesh" + CleanName(sibling) + ",\n")
+                        f.write("\t\t&node" + CleanName(sibling) + ",\n")
             
             else:
                 f.write("0,\n")
@@ -1277,9 +1302,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t}\n" +
                     "};\n\n")
             
-            # Write CHILDNODE structure
+            # Write CHILDREN structure
             
-            f.write("CHILDNODE node" + pName + "_objects = {\n")
+            f.write("CHILDREN node" + pName + "_objects = {\n")
             
             if 'objects' in PlanesObjects[p]:
             
