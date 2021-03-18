@@ -109,46 +109,47 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             return name
 
         def isInPlane(plane, obj):
-    
+                
             # Checks  if 'obj' has its coordinates contained between the plane's coordinate.
-            # If 'obj' is partly contained, returns which side (S, W, N, E) it's overlapping.
+            # If 'obj' is contained, returns 1.
+            # If 'obj' is partly contained, returns which side (S == 2, W == 4, N == 8, E == 6) it's overlapping.
             # If 'obj' is not contained in 'plane', returns 0.
             
             if (   
-                 (LvlPlanes[plane]['x1'] < LvlObjects[obj]['x1'] and LvlPlanes[plane]['x2'] > LvlObjects[obj]['x2']) and
-                 (LvlPlanes[plane]['y1'] < LvlObjects[obj]['y1'] and LvlPlanes[plane]['y2'] > LvlObjects[obj]['y2']) 
+                 (plane.get('x1') <= obj.get('x1') and plane.get('x2') >= obj.get('x2') ) and
+                 (plane.get('y1') <= obj.get('y1') and plane.get('y2') >= obj.get('y2') ) 
                ):
                 
                 return 1
                 
             # Overlap on the West side of the plane
             if ( 
-                 ( LvlPlanes[plane]['x1'] > LvlObjects[obj]['x1'] and LvlPlanes[plane]['x1'] < LvlObjects[obj]['x2'] ) and 
-                 ( LvlPlanes[plane]['y1'] < LvlObjects[obj]['y1'] and LvlPlanes[plane]['y2'] > LvlObjects[obj]['y2'] ) 
+                 ( plane.get('x1') >= obj.get('x1') and plane.get('x1') <= obj.get('x2') ) and 
+                 ( plane.get('y1') <= obj.get('y2') and plane.get('y2') >= obj.get('y1') ) 
                ):
                 
                 return 4
             
             # Overlap on the East side of the plane
             if ( 
-                 ( LvlPlanes[plane]['x2'] < LvlObjects[obj]['x2'] and LvlPlanes[plane]['x2'] > LvlObjects[obj]['x1'] ) and 
-                 ( LvlPlanes[plane]['y1'] < LvlObjects[obj]['y1'] and LvlPlanes[plane]['y2'] > LvlObjects[obj]['y2'] ) 
+                 ( plane.get('x2') <= obj.get('x2') and plane.get('x2') >= obj.get('x1') ) and 
+                 ( plane.get('y1') <= obj.get('y2') and plane.get('y2') >= obj.get('y1') ) 
                ):
                 
                 return 6
                 
             # Overlap on the North side of the plane
             if ( 
-                 ( LvlPlanes[plane]['y2'] < LvlObjects[obj]['y2'] and LvlPlanes[plane]['y2'] > LvlObjects[obj]['y1'] ) and 
-                 ( LvlPlanes[plane]['x1'] < LvlObjects[obj]['x1'] and LvlPlanes[plane]['x2'] > LvlObjects[obj]['x2'] )  
+                 ( plane.get('y2') <= obj.get('y2') and plane.get('y2') >= obj.get('y1') ) and 
+                 ( plane.get('x1') <= obj.get('x1') and plane.get('x2') >= obj.get('x2') )  
                ): 
 
                 return 8
             
             # Overlap on the South side of the plane
             if ( 
-                 ( LvlPlanes[plane]['y1'] > LvlObjects[obj]['y1'] and LvlPlanes[plane]['y1'] < LvlObjects[obj]['y2'] ) and 
-                 ( LvlPlanes[plane]['x1'] < LvlObjects[obj]['x1'] and LvlPlanes[plane]['x2'] > LvlObjects[obj]['x2'] )
+                 ( plane.get('y1') >= obj.get('y1') and plane.get('y1') <= obj.get('y2') ) and 
+                 ( plane.get('x1') <= obj.get('x1') and plane.get('x2') >= obj.get('x2') )
                ):
                 
                 return 2
@@ -162,13 +163,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Construct the line used for BSP generation from 'plane' 's coordinates, on specified side (S, W, N, E)
             # Returns an array of 3 values
             
-            if side == 'S':
-                
-                return [ LvlPlanes[plane]['x1'], LvlPlanes[plane]['y1'], LvlPlanes[plane]['x2'], LvlPlanes[plane]['y1'] ]
-                
             if side == 'N':
                 
                 return [ LvlPlanes[plane]['x1'], LvlPlanes[plane]['y2'], LvlPlanes[plane]['x2'], LvlPlanes[plane]['y2'] ]
+            
+            if side == 'S':
+                
+                return [ LvlPlanes[plane]['x1'], LvlPlanes[plane]['y1'], LvlPlanes[plane]['x2'], LvlPlanes[plane]['y1'] ]
                         
             if side == 'W':
                 
@@ -1083,6 +1084,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Link objects to their respective plane
 
         PlanesObjects = defaultdict(dict) 
+        
+        # List of objects that can travel ( actor , moveable props...)
+        
+        Moveables = []
 
         # Store XY1, XY2 values
 
@@ -1129,7 +1134,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # For each object not a plane, get its coordinates
                 
-                # ~ if not o.data.get('isLevel') and not o.data.get('isActor') :
+                # ~ if not o.data.get('isLevel'):
                 if not o.data.get('isLevel'):
                     
                     # World matrix is used to convert local to global coordinates
@@ -1154,6 +1159,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     Xvalues = []
 
                     Yvalues = []
+                    
+                    # Add objects that can travel to the 
+                    
+                    if o.data.get("isRigidBody"):
+                        
+                        Moveables.append(o.name)
 
         # Declare LvlPlanes nodes to avoid declaration dependency issues
             
@@ -1162,12 +1173,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         for k in LvlPlanes.keys():
             
             f.write("NODE node" + CleanName(k) + ";\n\n")
-            
-            # ~ if k < len( LvlPlanes.keys() ) - 1:
-                
-                # ~ f.write(", ")
-            
-        # ~ f.write(";\n\n")    
 
         # Sides of the plane to check
 
@@ -1197,7 +1202,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # If object is above plane
                 
-                if isInPlane(p, o) == 1:
+                if isInPlane(LvlPlanes[p], LvlObjects[o]) == 1:
                 
                     # If actor is on this plane, use it as starting node
                     
@@ -1205,7 +1210,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         nodePtr = p
                 
-                        break
+                        # ~ break
                         
                     # Add this object to the plane's list
                 
@@ -1216,6 +1221,21 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     else:
                 
                         PlanesObjects[p] = { 'objects' : [o] }
+            
+            # Add actor in every plane
+            
+            for moveable in Moveables:
+                
+                if 'objects' in PlanesObjects[p]:
+        
+                    if moveable not in PlanesObjects[p]['objects']:
+                
+                        PlanesObjects[p]['objects'].append(CleanName(moveable))
+                        
+                else:
+                    
+                    PlanesObjects[p] = { 'objects' : [ CleanName(moveable) ] }
+            
             
             # Find surrounding planes
             
@@ -1243,7 +1263,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             getSepLine(op, s[1])[2],
                             getSepLine(op, s[1])[3]
                     
-                             ) == 'connected':
+                             ) == 'connected' and (
+                            
+                            isInPlane( LvlPlanes[p], LvlPlanes[op] ) 
+                            
+                            ):
                             
                             # ... add it to the list
                             
@@ -1268,34 +1292,46 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             nSiblings = 0
             
-            if 'S' in PlanesObjects[p]['siblings']: 
-            
-                nSiblings += len(PlanesObjects[p]['siblings']['S'])
-            
-            if 'N' in PlanesObjects[p]['siblings']: 
+            if 'siblings' in PlanesObjects[p]:
+
+                if 'S' in PlanesObjects[p]['siblings']: 
                 
-                nSiblings += len(PlanesObjects[p]['siblings']['N'])
+                    nSiblings += len(PlanesObjects[p]['siblings']['S'])
                 
-            if 'E' in PlanesObjects[p]['siblings']: 
+                if 'N' in PlanesObjects[p]['siblings']: 
+                    
+                    nSiblings += len(PlanesObjects[p]['siblings']['N'])
+                    
+                if 'E' in PlanesObjects[p]['siblings']: 
+                    
+                    nSiblings += len(PlanesObjects[p]['siblings']['E'])
+                    
+                if 'W' in PlanesObjects[p]['siblings']: 
+                    
+                    nSiblings += len(PlanesObjects[p]['siblings']['W'])
                 
-                nSiblings += len(PlanesObjects[p]['siblings']['E'])
-                
-            if 'W' in PlanesObjects[p]['siblings']: 
-                
-                nSiblings += len(PlanesObjects[p]['siblings']['W'])
-            
             f.write("SIBLINGS node" + pName + "_siblings = {\n" + 
                     "\t" + str(nSiblings) + ",\n" +
                     "\t{\n")
             
             if 'siblings' in PlanesObjects[p]:
             
+                i = 0
+
                 for side in PlanesObjects[p]['siblings']:
-                    
+                
                     for sibling in PlanesObjects[p]['siblings'][side]:
                 
-                        f.write("\t\t&node" + CleanName(sibling) + ",\n")
-            
+                        f.write("\t\t&node" + CleanName(sibling) )
+                        
+                        if i < ( nSiblings - 1 ) :
+                    
+                            f.write(",")
+                        
+                        i += 1
+                        
+                        f.write("\n")
+                
             else:
                 f.write("0,\n")
             
@@ -1310,15 +1346,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                 f.write("\t" + str(len(PlanesObjects[p]['objects'])) + ",\n" +
                         "\t{\n")
-            
+                
+                i = 0
+                
                 for obj in PlanesObjects[p]['objects']:
                     
-                    f.write( "\t\t&mesh" + CleanName(obj) + ",\n" )
+                    f.write( "\t\t&mesh" + CleanName(obj))
+                    
+                    if i < len(PlanesObjects[p]['objects']) - 1:
+                    
+                        f.write(",")
+                    
+                    i += 1
+                    
+                    f.write("\n")
                     
             else: 
                 
                 f.write("\t0,\n" + 
-                        "\t{\n\t0\n")
+                        "\t{\n\t\t0\n")
             
             f.write("\t}\n" +
                     "};\n\n")
@@ -1331,7 +1377,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      "\t&node" + pName + "_objects\n" +
                      "};\n\n" )
 
-        f.write("NODE * curNode =  &node" + nodePtr + ";\n\n")
+        f.write("NODE * curNode =  &node" + CleanName(nodePtr) + ";\n\n")
 
         # Set default camera back in Blender
         
