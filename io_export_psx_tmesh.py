@@ -424,6 +424,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tMESH * plane;\n" +
                 "\tSIBLINGS * siblings;\n" + 
                 "\tCHILDREN * objects;\n" + 
+                "\tCHILDREN * rigidbodies;\n" + 
                 "\t} NODE;\n\n")
 
     ## Camera setup
@@ -1085,6 +1086,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         PlanesObjects = defaultdict(dict) 
         
+        PlanesRigidBodies = defaultdict(dict) 
+        
         # List of objects that can travel ( actor , moveable props...)
         
         Moveables = []
@@ -1226,15 +1229,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             for moveable in Moveables:
                 
-                if 'objects' in PlanesObjects[p]:
+                if 'rigidbodies' in PlanesRigidBodies[p]:
         
-                    if moveable not in PlanesObjects[p]['objects']:
+                    if moveable not in PlanesRigidBodies[p]['rigidbodies']:
                 
-                        PlanesObjects[p]['objects'].append(CleanName(moveable))
-                        
+                        PlanesRigidBodies[p]['rigidbodies'].append(CleanName(moveable))
                 else:
                     
-                    PlanesObjects[p] = { 'objects' : [ CleanName(moveable) ] }
+                    # ~ print(0)
+                    PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable) ] }
             
             
             # Find surrounding planes
@@ -1333,12 +1336,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         f.write("\n")
                 
             else:
-                f.write("0,\n")
+                f.write("\t\t0\n")
             
             f.write("\t}\n" +
                     "};\n\n")
             
-            # Write CHILDREN structure
+            # Write CHILDREN static objects structure
             
             f.write("CHILDREN node" + pName + "_objects = {\n")
             
@@ -1368,13 +1371,45 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("\t}\n" +
                     "};\n\n")
+            
+            # Write CHILDREN rigidbodies structure
+            
+            f.write("CHILDREN node" + pName + "_rigidbodies = {\n")
+            
+            if 'rigidbodies' in PlanesRigidBodies[p]:
+            
+                f.write("\t" + str(len(PlanesRigidBodies[p]['rigidbodies'])) + ",\n" +
+                        "\t{\n")
+                
+                i = 0
+                
+                for obj in PlanesRigidBodies[p]['rigidbodies']:
                     
+                    f.write( "\t\t&mesh" + CleanName(obj))
+                    
+                    if i < len(PlanesRigidBodies[p]['rigidbodies']) - 1:
+                    
+                        f.write(",")
+                    
+                    i += 1
+                    
+                    f.write("\n")
+                    
+            else: 
+                
+                f.write("\t0,\n" + 
+                        "\t{\n\t\t0\n")
+            
+            f.write("\t}\n" +
+                    "};\n\n")
+            
             # Write NODE structure
                     
             f.write( "NODE node" + pName + " = {\n" +
                      "\t&mesh" + pName + ",\n" +
                      "\t&node" + pName + "_siblings,\n" +
-                     "\t&node" + pName + "_objects\n" +
+                     "\t&node" + pName + "_objects,\n" +
+                     "\t&node" + pName + "_rigidbodies\n" +
                      "};\n\n" )
 
         f.write("NODE * curNode =  &node" + CleanName(nodePtr) + ";\n\n")
