@@ -4,7 +4,7 @@ bl_info = {
     "name":         "PSX TMesh exporter",
     "author":       "Schnappy, TheDukeOfZill",
     "blender":      (2,7,9),
-    "version":      (0,0,2),
+    "version":      (0,0,3),
     "location":     "File > Import-Export",
     "description":  "Export psx data format",
     "category":     "Import-Export"
@@ -335,6 +335,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tVECTOR  min; \n" +
                 "\tVECTOR  max; \n" +
                 "\tint     restitution; \n" +
+                # ~ "\tstruct NODE * curNode; \n" +
                 "\t} BODY;\n\n")
         
         # VANIM
@@ -374,11 +375,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tshort   *    isActor;\n" +
                 "\tshort   *    isLevel;\n" +
                 "\tshort   *    isBG;\n" +
+                "\tshort   *    isSprite;\n" +
                 "\tlong    *    p;\n" + 
                 "\tlong    *    OTz;\n" + 
                 "\tBODY    *    body;\n" + 
                 "\tVANIM   *    anim;\n" + 
-                "\tvoid    *    node;\n" + 
+                "\tstruct NODE   *    node;\n" + 
                 "\t} MESH;\n\n")
         
         # CAMPOS
@@ -747,6 +749,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 'isActor':0,
                 'isLevel':0,
                 'isBG':0,
+                'isSprite':0,
                 'mass': 1,
                 'restitution': 0,
                 'lerp': 0
@@ -861,6 +864,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "short model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
                     "short model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
                     "short model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
+                    "short model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
                     "long model"+cleanName+"_p = 0;\n" +
                     "long model"+cleanName+"_OTz = 0;\n" +
                     "BODY model"+cleanName+"_body = {\n" +
@@ -872,7 +876,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     # write min and max values of AABBs on each axis
                     "\t" + str(round(min(Xvals) * scale)) + "," + str(round(min(Zvals) * scale)) + "," + str(round(min(Yvals) * scale)) + ", 0,\n" +
                     "\t" + str(round(max(Xvals) * scale)) + "," + str(round(max(Zvals) * scale)) + "," + str(round(max(Yvals) * scale)) + ", 0,\n" +
-                    "\t" + str(int(chkProp['restitution'])) + "\n" + 
+                    "\t" + str(int(chkProp['restitution'])) + ",\n" + 
+                    # ~ "\tNULL\n" + 
                     "\t};\n\n")
  
             # Write TMESH struct
@@ -984,18 +989,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "\t&model"+cleanName+"_isActor,\n" +
                     "\t&model"+cleanName+"_isLevel,\n" +
                     "\t&model"+cleanName+"_isBG,\n" +
+                    "\t&model"+cleanName+"_isSprite,\n" +
                     "\t&model"+cleanName+"_p,\n" +
                     "\t&model"+cleanName+"_OTz,\n" +
-                    "\t&model"+cleanName+"_body")
+                    "\t&model"+cleanName+"_body,\n")
                     
             if m.get("isAnim") is not None and m["isAnim"] != 0:
                     
-                    f.write(",\n\t&model"+cleanName+"_anim\n")
+                    f.write("\t&model"+cleanName+"_anim,\n")
             else:
                     
-                    f.write("\n")
+                    f.write("\t0,\n")
                     
-            f.write("};\n\n")
+                    
+            f.write(
+                    "\t0" +
+                    "\n};\n\n"
+                    )
 
         f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
 
@@ -1207,23 +1217,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 if isInPlane(LvlPlanes[p], LvlObjects[o]) == 1:
                 
-                    # If actor is on this plane, use it as starting node
+                    # Add all objects but the actor
                     
-                    if o == actorPtr:
+                    if o != actorPtr:
+                        
+                        # Add this object to the plane's list
+                    
+                        if 'objects' in PlanesObjects[p]:
+                    
+                            PlanesObjects[p]['objects'].append(o)
+                    
+                        else:
+                    
+                            PlanesObjects[p] = { 'objects' : [o] }
+            
+                    else:
+                    
+                        # If actor is on this plane, use it as starting node
                         
                         nodePtr = p
-                
-                        # ~ break
-                        
-                    # Add this object to the plane's list
-                
-                    if 'objects' in PlanesObjects[p]:
-                
-                        PlanesObjects[p]['objects'].append(o)
-                
-                    else:
-                
-                        PlanesObjects[p] = { 'objects' : [o] }
             
             # Add actor in every plane
             
