@@ -397,6 +397,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCAMPOS    * campos;\n" +
                 "\tTIM_IMAGE * BGtim;\n" +
                 "\tunsigned long * tim_data;\n" +
+                "\tMESH * objects;\n" +
                 "\t} CAMANGLE;\n\n")
                 
         # CAMPATH
@@ -442,18 +443,27 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Set camera position and rotation in the scene
         
         for o in range(len(bpy.data.objects)):
+    
             if bpy.data.objects[o].type == 'CAMERA' and bpy.data.objects[o].data.get('isDefault'):
+    
                 defaultCam = bpy.data.objects[o].name
+    
             if bpy.data.objects[o].type == 'CAMERA':
+    
                 f.write("CAMPOS camPos_" + CleanName(bpy.data.objects[o].name) + " = {\n" +
+    
                 "\t{" + str(round(-bpy.data.objects[o].location.x * scale)) + "," + str(round(bpy.data.objects[o].location.z * scale)) + "," +str(round(-bpy.data.objects[o].location.y * scale)) + "},\n" +
+    
                 "\t{" + str(round(-(degrees(bpy.data.objects[o].rotation_euler.x)-90)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[o].rotation_euler.z)/360 * 4096)) + "," + str(round(-(degrees(bpy.data.objects[o].rotation_euler.y))/360 * 4096)) + "}\n" +
+    
                 "};\n\n")
                 
         # Find camera path points and append them to camPathPoints[]
         
             if bpy.data.objects[o].type == 'CAMERA' :
+    
                 if bpy.data.objects[o].name.startswith("camPath") and not bpy.data.objects[o].data.get('isDefault'):
+    
                     camPathPoints.append(bpy.data.objects[o].name)
         
         # Write the CAMPATH structure
@@ -465,15 +475,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # ~ camPathPoints = list(reversed(camPathPoints))
             
             for p in range(len(camPathPoints)):
+    
                 if p == 0:
+    
                     f.write("CAMPATH camPath = {\n" +
+    
                             "\t" + str(len(camPathPoints)) + ",\n" +
+    
                             "\t0,\n" +
+    
                             "\t0,\n" +
+    
                             "\t{\n")
+    
                 f.write("\t\t{" + str(round(-bpy.data.objects[camPathPoints[p]].location.x * scale)) + "," + str(round(bpy.data.objects[camPathPoints[p]].location.z * scale)) + "," +str(round(-bpy.data.objects[camPathPoints[p]].location.y * scale)) + "}")
+    
                 if p != len(camPathPoints) - 1:
+    
                     f.write(",\n")  
+    
             f.write("\n\t}\n};\n\n")
         
         else:
@@ -481,9 +501,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # If no camera path points are found, use default
             
             f.write("CAMPATH camPath = {\n" +
+    
                             "\t0,\n" +
+    
                             "\t0,\n" +
+    
                             "\t0\n"  +
+    
                             "};\n\n")        
         
     ## Lighting setup 
@@ -502,6 +526,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      # ~ "};\n")
                      
             cnt = 0
+       
             pad = 3 - len(bpy.data.lamps)
             
             f.write( "static MATRIX lgtmat = {\n")
@@ -517,22 +542,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 lightdir = bpy.data.objects[bpy.data.lamps[l].name].matrix_world * Vector((0,0,-1,0))
                 
                 f.write( 
+            
                     "\t" + str(int(lightdir.x * energy)) + "," + 
+            
                     "\t" + str(int(-lightdir.z * energy)) + "," +
+            
                     "\t" + str(int(lightdir.y * energy))  
+
                     )
-                    
+            
                 if l != len(bpy.data.lamps) - 1:
+
                     f.write(",\n")
                 
                 # If less than 3 light sources exist in blender, fill the matrix with 0s.                
                 
                 if pad:
+          
                     f.write(",\n")
+          
                     while cnt < pad:
+          
                         f.write("\t0,0,0")
+          
                         if cnt != pad:
+          
                             f.write(",\n")
+          
                         cnt += 1
             
             f.write("\n\t};\n\n")
@@ -542,13 +578,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write( "static MATRIX cmat = {\n")
             
             LCM = []
+        
             for l in bpy.data.lamps:
+        
                 LCM.append(str(int(l.color.r * 4096) if l.color.r else 0))
+        
                 LCM.append(str(int(l.color.g * 4096) if l.color.g else 0))
+        
                 LCM.append(str(int(l.color.b * 4096) if l.color.b else 0))
             
             if len(LCM) < 9:
+        
                 while len(LCM) < 9:
+        
                     LCM.append('0')
 
             # Write LC matrix
@@ -562,8 +604,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     ## Meshes 
     
         actorPtr = first_mesh
+      
         levelPtr = first_mesh
+      
         propPtr = first_mesh
+      
         nodePtr = first_mesh
         
         timList = []
@@ -573,7 +618,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Store vertices coordinates by axis to find max/min coordinates
             
             Xvals = []
+           
             Yvals = []
+           
             Zvals = []
  
             cleanName = CleanName(m.name)
@@ -589,25 +636,37 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # Append vertex coords to lists
                 
                 Xvals.append(v.x)
+         
                 Yvals.append(v.y)
+         
                 Zvals.append(-v.z)
                 
                 f.write("\t{"+str(round(v.x*scale))+","+str(round(-v.z*scale)) + "," + str(round(v.y*scale)) +"}")
                 
                 if i != len(m.vertices) - 1:
+         
                     f.write(",")
+         
                 f.write("\n")
+         
             f.write("};\n\n")
             
             # Write normals vectors
  
             f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
+            
             for i in range(len(m.vertices)):
+            
                 poly = m.vertices[i]
+            
                 f.write("\t"+str(round(-poly.normal.x * 4096))+","+str(round(poly.normal.z  * 4096))+","+str(round(-poly.normal.y  * 4096))+",0")
+            
                 if i != len(m.vertices) - 1:
+            
                     f.write(",")
+            
                 f.write("\n")
+            
             f.write("};\n\n")
  
             # Write UVs vectors if a texture exists
@@ -742,34 +801,52 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Get object's custom properties
             
             chkProp = {
+       
                 'isAnim':0,
+       
                 'isRigidBody':0,
+       
                 'isStaticBody':0,
+       
                 'isPrism':0,
+       
                 'isActor':0,
+       
                 'isLevel':0,
+       
                 'isBG':0,
+       
                 'isSprite':0,
+       
                 'mass': 1,
+       
                 'restitution': 0,
+       
                 'lerp': 0
+       
             }
             
             for prop in chkProp:
+        
                 if m.get(prop) is not None:
+        
                     chkProp[prop] = m[prop]
             
             # put isBG back to 0 if using precalculated BGs
             if not self.exp_Precalc:
+        
                 chkProp['isBG'] = 0;
             
             if m.get('isActor'):
+        
                 actorPtr = m.name
             
             if m.get('isLevel'):
+        
                 levelPtr = cleanName
             
             if m.get('isProp'):
+        
                 propPtr = cleanName
             
             # ~ if m.get('isLevel'):
@@ -1055,6 +1132,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "\t&camPos_" + prefix + ",\n" +
                     "\t&tim_bg_" + prefix + ",\n" +
                     "\t_binary_TIM_bg_" + prefix + "_tim_start\n" +
+                    "\t" + prefix + "_objects\n" +
                     "};\n\n")
             
         # Write camera angles in an array for loops
@@ -1135,8 +1213,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         Yvalues.append( (mw * v.co).y )
                    
                     LvlPlanes[o.name] = {'x1' : min(Xvalues),
+                                         
                                          'y1' : min(Yvalues),
+                                         
                                          'x2' : max(Xvalues),
+                                         
                                          'y2' : max(Yvalues)}
                                          
                     # Clear X/Y lists for next iteration
