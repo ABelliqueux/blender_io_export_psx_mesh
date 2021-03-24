@@ -32,8 +32,9 @@ from bpy.props import (CollectionProperty,
                        )
 
 from bpy_extras.io_utils import (ExportHelper,
-                                 axis_conversion
-                                 )
+                                 axis_conversion)
+
+from bpy_extras.object_utils import world_to_camera_view
  
 class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
@@ -76,6 +77,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     )
     
     def execute(self, context):
+
+        def isInFrame(scene, cam, target):
+            
+            position = world_to_camera_view(scene, cam, target.location)
+            
+            if (
+                
+                 (position.x < 0 or position.x > 1 ) or
+                
+                 (position.y < 0 or position.y > 1 ) or
+                
+                 (position.z < 0 )
+                
+               ) :
+                   
+                return False
+                
+            else:
+                
+                return True
 
         def triangulate_object(obj): 
             
@@ -253,11 +274,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         dirpath = os.path.join(folder, "TIM")
         
-    ### Export pre-calculated backgrounds 
+    ### Export pre-calculated backgrounds and construct a list of visible objects for each camera angle
         
         camAngles = []
         
         defaultCam = 'NULL'
+
+        # List of Rigid/Static bodies to ray a cast upon
+
+        rayTargets = []
 
         # If using precalculated BG, render and export them to ./TIM/
         
@@ -276,7 +301,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Get active cam
             
-            cam = bpy.context.scene.camera
+            scene = bpy.context.scene
+            
+            cam = scene.camera
             
             # Find default cam, and cameras in camPath
             
@@ -302,7 +329,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     camAngles.append(o)
         
-        
+            
 ### Start writing output file
         
         # Open file
@@ -397,7 +424,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCAMPOS    * campos;\n" +
                 "\tTIM_IMAGE * BGtim;\n" +
                 "\tunsigned long * tim_data;\n" +
-                "\tMESH * objects;\n" +
+                "\tint index;\n" +
+                "\tMESH * objects[];\n" +
                 "\t} CAMANGLE;\n\n")
                 
         # CAMPATH
@@ -443,10 +471,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Set camera position and rotation in the scene
         
         for o in range(len(bpy.data.objects)):
+            
+            # Add objects of type MESH with a Rigidbody or StaticBody flag set to a list
+            
+            if bpy.data.objects[o].type == 'MESH' and ( bpy.data.objects[o].data.get('isRigidBody') or bpy.data.objects[o].data.get('isStaticBody') ) :
+    
+                rayTargets.append(bpy.data.objects[o])
+            
+            # Set object of type CAMERA with isDefault flag as default camera
     
             if bpy.data.objects[o].type == 'CAMERA' and bpy.data.objects[o].data.get('isDefault'):
     
                 defaultCam = bpy.data.objects[o].name
+            
+            # Declare each blender camera as a CAMPOS
     
             if bpy.data.objects[o].type == 'CAMERA':
     
@@ -1103,16 +1141,58 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         if not camAngles:
 
             f.write("CAMANGLE camAngle_" + CleanName(defaultCam) + " = {\n" +
+                   
                     "\t&camPos_" + CleanName(defaultCam) + ",\n" +
+                   
                     "\t0,\n" + 
+                   
                     "\t0\n" + 
+                   
                     "};\n\n")
         
         # If camAngles is populated, use backgrounds and camera angles
         
-        for o in camAngles:
+        for camera in camAngles:
         
-            prefix = CleanName(o.name)
+            # Cast a ray from camera to each Rigid/Static body to determine visibility
+            
+            scene = bpy.context.scene
+            
+            # List of target found visible
+            
+            visibleTarget = []
+            
+            for target in rayTargets:
+                
+                print(target)
+                
+                # Chech object is in view frame
+                
+                inViewFrame = isInFrame(scene, camera, target)
+                
+                if inViewFrame:
+                
+                    # Get normalized direction vector between camera and object
+                    
+                    dirToTarget = target.location - camera.location
+                    
+                    dirToTarget.normalize() 
+                     
+                    # Cast ray from camera to object
+                    # Unpack results in several variables. 
+                    # We're only interested in 'hitObject' though
+                    
+                    result, location, normal, index, hitObject, matrix = scene.ray_cast( camera.location, dirToTarget )
+                    
+                    # If hitObject is the same as target, nothing is obstructing it's visibility
+                    
+                    if hitObject is not None:
+                        
+                        if hitObject.name == target.name:
+                            
+                            visibleTarget.append(target)
+        
+            prefix = CleanName(camera.name)
             
             # Include Tim data 
             
@@ -1126,35 +1206,66 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("TIM_IMAGE tim_bg_" + prefix + ";\n\n")
             
+            # Write list of visible objects in this camera angle
+            
+            # ~ f.write("MESH * " + prefix + "_objects[] = {\n")
+
+            # ~ for target in range( len( visibleTarget ) ) :
+                
+                # ~ f.write( "\t&mesh" + CleanName(visibleTarget[target].name) )
+                    
+                # ~ if target < len(visibleTarget) - 1:
+                    
+                    # ~ f.write(",\n")
+                    
+            # ~ f.write("\n};\n\n")
+            
             # Write corresponding CamAngle struct
             
             f.write("CAMANGLE camAngle_" + prefix + " = {\n" +
+            
                     "\t&camPos_" + prefix + ",\n" +
+            
                     "\t&tim_bg_" + prefix + ",\n" +
-                    "\t_binary_TIM_bg_" + prefix + "_tim_start\n" +
-                    "\t" + prefix + "_objects\n" +
+            
+                    "\t_binary_TIM_bg_" + prefix + "_tim_start,\n" +
+                    
+                    "\t" + str( len( visibleTarget ) ) + ",\n" +
+            
+                    "\t{\n")
+
+            for target in range( len( visibleTarget ) ) :
+                
+                f.write( "\t\t&mesh" + CleanName(visibleTarget[target].name) )
+                    
+                if target < len(visibleTarget) - 1:
+                    
+                    f.write(",\n")
+                    
+            f.write("\n\t}\n" +
+            
                     "};\n\n")
             
         # Write camera angles in an array for loops
         
         f.write("CAMANGLE * camAngles[" + str(len(camAngles)) + "] = {\n")
         
-        for o in camAngles:
+        for camera in camAngles:
         
-            prefix = CleanName(o.name)     
+            prefix = CleanName(camera.name)     
         
             f.write("\t&camAngle_" + prefix + ",\n")
         
         f.write("};\n\n")
         
 
-        f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
+        # ~ f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
         
-        f.write("MESH * levelPtr = &mesh" + levelPtr + ";\n")
+        # ~ f.write("MESH * levelPtr = &mesh" + levelPtr + ";\n")
         
-        f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
+        # ~ f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
         
-        f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
+        # ~ f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
 
         
     ## Spatial Partitioning
@@ -1315,7 +1426,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     else:
                     
                         # If actor is on this plane, use it as starting node
-                        
+                        levelPtr = p
                         nodePtr = p
             
             # Add actor in every plane
@@ -1504,6 +1615,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      "\t&node" + pName + "_objects,\n" +
                      "\t&node" + pName + "_rigidbodies\n" +
                      "};\n\n" )
+
+        f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
+        
+        f.write("MESH * levelPtr = &mesh" + CleanName(levelPtr) + ";\n")
+        
+        f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
+        
+        f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
 
         f.write("NODE * curNode =  &node" + CleanName(nodePtr) + ";\n\n")
 
