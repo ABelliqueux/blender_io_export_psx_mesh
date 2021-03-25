@@ -408,6 +408,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tBODY    *    body;\n" + 
                 "\tVANIM   *    anim;\n" + 
                 "\tstruct NODE   *    node;\n" + 
+                "\tSVECTOR      pos2D;\n" + 
                 "\t} MESH;\n\n")
         
         # CAMPOS
@@ -1216,20 +1217,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("TIM_IMAGE tim_bg_" + prefix + ";\n\n")
             
-            # Write list of visible objects in this camera angle
-            
-            # ~ f.write("MESH * " + prefix + "_objects[] = {\n")
-
-            # ~ for target in range( len( visibleTarget ) ) :
-                
-                # ~ f.write( "\t&mesh" + CleanName(visibleTarget[target].name) )
-                    
-                # ~ if target < len(visibleTarget) - 1:
-                    
-                    # ~ f.write(",\n")
-                    
-            # ~ f.write("\n};\n\n")
-            
             # Write corresponding CamAngle struct
             
             f.write("CAMANGLE camAngle_" + prefix + " = {\n" +
@@ -1267,16 +1254,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t&camAngle_" + prefix + ",\n")
         
         f.write("};\n\n")
-        
-
-        # ~ f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
-        
-        # ~ f.write("MESH * levelPtr = &mesh" + levelPtr + ";\n")
-        
-        # ~ f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
-        
-        # ~ f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
-
         
     ## Spatial Partitioning
     
