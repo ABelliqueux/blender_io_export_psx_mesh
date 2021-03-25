@@ -873,6 +873,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     chkProp[prop] = m[prop]
             
             # put isBG back to 0 if using precalculated BGs
+            
             if not self.exp_Precalc:
         
                 chkProp['isBG'] = 0;
@@ -888,10 +889,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             if m.get('isProp'):
         
                 propPtr = cleanName
-            
-            # ~ if m.get('isLevel'):
-                # ~ nodePtr = cleanName
-    
+
     ## Vertex animation
                 
             # write vertex anim if isAnim != 0 
@@ -903,13 +901,21 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 o = bpy.data.objects[m.name]
 
-                # ~ frame_start = bpy.context.scene.frame_start
+                # If an action exists with the same name as the object, use that
                 
-                frame_start = int(bpy.data.actions[m.name].frame_range[0])
+                if m.name in bpy.data.actions:
                 
-                # ~ frame_end = bpy.context.scene.frame_end
+                    frame_start = int(bpy.data.actions[m.name].frame_range[0])
                 
-                frame_end = int(bpy.data.actions[m.name].frame_range[1])
+                    frame_end = int(bpy.data.actions[m.name].frame_range[1])
+                
+                else:
+                    
+                    # Use scene's Start/End frames
+                    
+                    frame_start = int( bpy.context.scene.frame_start )
+                
+                    frame_end = int( bpy.context.scene.frame_end )
                 
                 nFrame = frame_end - frame_start
                 
@@ -925,7 +931,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                     nm = o.to_mesh(bpy.context.scene, True, 'PREVIEW')
                                         
-                    if i == 0 :
+                    if i == frame_start :
                     
                         f.write("VANIM model"+cleanName+"_anim = {\n" +
                                 "\t" + str(nFrame) + ",\n" +
@@ -1168,16 +1174,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             for target in rayTargets:
                 
-                # ~ print(target)
-                
                 # Chech object is in view frame
                 
                 inViewFrame = isInFrame(scene, camera, target)
                 
                 if inViewFrame:
                     
-                    # ~ print(camera.name + ":" + target.name + "\n")
-                
                     # Get normalized direction vector between camera and object
                     
                     dirToTarget = target.location - camera.location
@@ -1192,12 +1194,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     # If hitObject is the same as target, nothing is obstructing it's visibility
                     
-                    # ~ print(target.name + "-" + hitObject.name)
-                    
                     if hitObject is not None:
                         
-                        # ~ if hitObject.data.get('isStaticBody') or hitObject.data.get('isRigidBody') :
-                            
                         if hitObject in rayTargets:
                                 
                             print(camera.name + ":" + hitObject.name + " - " + target.name )
