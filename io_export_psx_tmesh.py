@@ -474,9 +474,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Add objects of type MESH with a Rigidbody or StaticBody flag set to a list
             
-            if bpy.data.objects[o].type == 'MESH' and ( bpy.data.objects[o].data.get('isRigidBody') or bpy.data.objects[o].data.get('isStaticBody') ) :
+            if bpy.data.objects[o].type == 'MESH':
+                
+                if bpy.data.objects[o].data.get('isRigidBody') or bpy.data.objects[o].data.get('isStaticBody') :
     
-                rayTargets.append(bpy.data.objects[o])
+                    rayTargets.append(bpy.data.objects[o])
             
             # Set object of type CAMERA with isDefault flag as default camera
     
@@ -503,7 +505,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 if bpy.data.objects[o].name.startswith("camPath") and not bpy.data.objects[o].data.get('isDefault'):
     
                     camPathPoints.append(bpy.data.objects[o].name)
-        
+
         # Write the CAMPATH structure
         
         if camPathPoints:
@@ -1156,6 +1158,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             # Cast a ray from camera to each Rigid/Static body to determine visibility
             
+            # Get current scene 
+            
             scene = bpy.context.scene
             
             # List of target found visible
@@ -1164,13 +1168,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             for target in rayTargets:
                 
-                print(target)
+                # ~ print(target)
                 
                 # Chech object is in view frame
                 
                 inViewFrame = isInFrame(scene, camera, target)
                 
                 if inViewFrame:
+                    
+                    # ~ print(camera.name + ":" + target.name + "\n")
                 
                     # Get normalized direction vector between camera and object
                     
@@ -1186,12 +1192,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     # If hitObject is the same as target, nothing is obstructing it's visibility
                     
+                    # ~ print(target.name + "-" + hitObject.name)
+                    
                     if hitObject is not None:
                         
-                        if hitObject.name == target.name:
+                        # ~ if hitObject.data.get('isStaticBody') or hitObject.data.get('isRigidBody') :
+                            
+                        if hitObject in rayTargets:
+                                
+                            print(camera.name + ":" + hitObject.name + " - " + target.name )
                             
                             visibleTarget.append(target)
-        
+            
             prefix = CleanName(camera.name)
             
             # Include Tim data 
