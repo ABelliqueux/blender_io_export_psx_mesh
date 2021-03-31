@@ -18,7 +18,7 @@ import bmesh
 
 import unicodedata
 
-from math import radians, degrees, floor, cos, sin 
+from math import radians, degrees, floor, cos, sin, sqrt
 
 from mathutils import Vector
 
@@ -78,26 +78,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
     def execute(self, context):
 
-        def isInFrame(scene, cam, target):
-            
-            position = world_to_camera_view(scene, cam, target.location)
-            
-            if (
-                
-                 (position.x < 0 or position.x > 1 ) or
-                
-                 (position.y < 0 or position.y > 1 ) or
-                
-                 (position.z < 0 )
-                
-               ) :
-                   
-                return False
-                
-            else:
-                
-                return True
-
         def triangulate_object(obj): 
             
             # Triangulate an object's mesh
@@ -128,6 +108,26 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             name = unicodedata.normalize('NFKD',name).encode('ASCII', 'ignore').decode()
             
             return name
+
+        def isInFrame(scene, cam, target):
+            
+            position = world_to_camera_view(scene, cam, target.location)
+            
+            if (
+                
+                 (position.x < 0 or position.x > 1 ) or
+                
+                 (position.y < 0 or position.y > 1 ) or
+                
+                 (position.z < 0 )
+                
+               ) :
+                   
+                return False
+                
+            else:
+                
+                return True
 
         def isInPlane(plane, obj):
                 
@@ -248,6 +248,48 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 return "intersect"
 
+        def objVertWtoS(scene, cam, target, toScale = 1):
+
+            screenPos = []
+
+            # Get objects world matrix
+            
+            mw = target.matrix_world
+            
+            # Get object's mesh
+            
+            mesh = bpy.data.meshes[ target.name ]
+            
+            # For each vertex in mesh, get screen coordinates
+            
+            for vertex in mesh.vertices:
+                
+                # Get meshes world coordinates 
+                
+                screenPos.append( world_to_camera_view( scene, cam, ( mw * vertex.co ) ) )
+            
+            if toScale:
+            
+                # Get current scene rsolution
+            
+                resX = scene.render.resolution_x
+            
+                resY = scene.render.resolution_y
+            
+                # Scale values
+            
+                for vector in screenPos:
+                    
+                    # ~ vector.x = int( resX * vector.x ) < 0 ? 0 : int( resX * vector.x ) > 320 ? 320 : int( resX * vector.x )
+                    
+                    vector.x = max ( 0, min ( resX, int( resX * vector.x ) ) )
+            
+                    vector.y = max ( 0, min ( resY, int( resY * vector.y ) ) )
+                    
+                    vector.z = int( vector.z )
+                                
+            return screenPos
+        
         # Leave edit mode to avoid errors
 
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -349,7 +391,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "struct CAMANGLE;\n" +
                 "struct SIBLINGS;\n" +
                 "struct CHILDREN;\n" +
-                "struct NODE;\n\n")
+                "struct NODE;\n" +
+                "struct QUAD;\n" +
+                "\n")
         
         # BODY
         
@@ -382,7 +426,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         f.write("typedef struct PRIM {\n" +
                 "\tVECTOR order;\n" +
-                "\tint    code; // Same as POL3/POL4 codes : Code (F3 = 1, FT3 = 2, G3 = 3, GT3 = 4) Code (F4 = 5, FT4 = 6, G4 = 7, GT4 = 8)\n" +
+                "\tint    code; // Same as POL3/POL4 codes : Code (F3 = 1, FT3 = 2, G3 = 3,\n// GT3 = 4) Code (F4 = 5, FT4 = 6, G4 = 7, GT4 = 8)\n" +
                 "\t} PRIM;\n\n")
         
         # MESH
@@ -408,8 +452,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tBODY    *    body;\n" + 
                 "\tVANIM   *    anim;\n" + 
                 "\tstruct NODE   *    node;\n" + 
-                "\tSVECTOR      pos2D;\n" + 
+                "\tVECTOR       pos2D;\n" + 
                 "\t} MESH;\n\n")
+        
+        #QUAD
+        
+        f.write("typedef struct QUAD {\n" +
+                "\tVECTOR       v0, v1;\n" +
+                "\tVECTOR       v2, v3;\n" +
+                "\t} QUAD;\n\n")
         
         # CAMPOS
         
@@ -417,7 +468,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tVECTOR  pos;\n" +
                 "\tSVECTOR rot;\n" + 
                 "\t} CAMPOS;\n\n" +
-                "\n// Blender cam ~= PSX cam with these settings : NTSC - 320x240, PAL 320x256, pixel ratio 1:1, cam focal length : perspective 90° ( 16 mm ))\n\n")
+                "\n// Blender cam ~= PSX cam with these settings : \n" +
+                "// NTSC - 320x240, PAL 320x256, pixel ratio 1:1,\n" +
+                "// cam focal length : perspective 90° ( 16 mm ))\n" + 
+                "// With a FOV of 1/2, camera focal length is ~= 16 mm / 90°\n" + 
+                "// Lower values mean wider angle\n\n")
         
         # CAMANGLE
         
@@ -425,6 +480,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCAMPOS    * campos;\n" +
                 "\tTIM_IMAGE * BGtim;\n" +
                 "\tunsigned long * tim_data;\n" +
+                "\tQUAD  bw, fw;\n" +
                 "\tint index;\n" +
                 "\tMESH * objects[];\n" +
                 "\t} CAMANGLE;\n\n")
@@ -656,490 +712,513 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         for m in bpy.data.meshes:
  
-            # Store vertices coordinates by axis to find max/min coordinates
-            
-            Xvals = []
-           
-            Yvals = []
-           
-            Zvals = []
- 
-            cleanName = CleanName(m.name)
-
-            # Write vertices vectors
- 
-            f.write("SVECTOR "+"model"+cleanName+"_mesh[] = {\n")
-
-            for i in range(len(m.vertices)):
+            if not m.get('isPortal') :
                 
-                v = m.vertices[i].co
+                # Store vertices coordinates by axis to find max/min coordinates
                 
-                # Append vertex coords to lists
-                
-                Xvals.append(v.x)
-         
-                Yvals.append(v.y)
-         
-                Zvals.append(-v.z)
-                
-                f.write("\t{"+str(round(v.x*scale))+","+str(round(-v.z*scale)) + "," + str(round(v.y*scale)) +"}")
-                
-                if i != len(m.vertices) - 1:
-         
-                    f.write(",")
-         
-                f.write("\n")
-         
-            f.write("};\n\n")
-            
-            # Write normals vectors
- 
-            f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
-            
-            for i in range(len(m.vertices)):
-            
-                poly = m.vertices[i]
-            
-                f.write("\t"+str(round(-poly.normal.x * 4096))+","+str(round(poly.normal.z  * 4096))+","+str(round(-poly.normal.y  * 4096))+",0")
-            
-                if i != len(m.vertices) - 1:
-            
-                    f.write(",")
-            
-                f.write("\n")
-            
-            f.write("};\n\n")
- 
-            # Write UVs vectors if a texture exists
-            
-            # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
-            # bpy.context.active_object.data.uv_textures.active.data[0].image.name
-            # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath
-            # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath_from_user()
-            #
-            # get image size x, y
-            # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
-            # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
-            
-                
-            if len(m.uv_textures) != None:
- 
-                for t in range(len(m.uv_textures)):
- 
-                    if m.uv_textures[t].data[0].image != None:
- 
-                        f.write("SVECTOR "+"model"+cleanName+"_uv[] = {\n")
- 
-                        texture_image = m.uv_textures[t].data[0].image
- 
-                        tex_width = texture_image.size[0]
- 
-                        tex_height = texture_image.size[1]
- 
-                        uv_layer = m.uv_layers[0].data
- 
-                        for i in range(len(uv_layer)):
- 
-                            u = uv_layer[i].uv
- 
-                            ux = u.x * tex_width
- 
-                            uy = u.y * tex_height
- 
-                            # ~ if self.exp_Precalc and m.get('isBG'):
-                                # ~ f.write("\t255, 255, 0, 0") # Clamp values to 0-255 to avoid tpage overflow
-                            # ~ else:
- 
-                            f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
- 
-                            if i != len(uv_layer) - 1:
- 
-                                f.write(",")
- 
-                            f.write("\n")
- 
-                        f.write("};\n\n")
-                        
-                        # Save UV texture to a file in ./TIM
-                        # It will have to be converted to a tim file
+                Xvals = []
+               
+                Yvals = []
+               
+                Zvals = []
+     
+                cleanName = CleanName(m.name)
 
-                        if texture_image.filepath == '':
+                # Write vertices vectors
+     
+                f.write("SVECTOR "+"model"+cleanName+"_mesh[] = {\n")
 
-                            os.makedirs(dirpath, exist_ok = 1)
-
-                            texture_image.filepath_raw = folder + os.sep + "TIM" + os.sep + CleanName(texture_image.name) + "." + texture_image.file_format
-
-                        texture_image.save()
-                        
-            # Write vertex colors vectors
- 
-            f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n")
+                for i in range(len(m.vertices)):
+                    
+                    v = m.vertices[i].co
+                    
+                    # Append vertex coords to lists
+                    
+                    Xvals.append(v.x)
              
-            # If vertex colors exist, use them
-            
-            if len(m.vertex_colors) != 0:           
-            
-                colors = m.vertex_colors[0].data
-            
-                for i in range(len(colors)):
-            
-                    f.write("\t"+str(int(colors[i].color.r*255))+","+str(int(colors[i].color.g*255))+","+str(int(colors[i].color.b*255))+", 0")
-            
-                    if i != len(colors) - 1:
-            
+                    Yvals.append(v.y)
+             
+                    Zvals.append(-v.z)
+                    
+                    f.write("\t{"+str(round(v.x*scale))+","+str(round(-v.z*scale)) + "," + str(round(v.y*scale)) +"}")
+                    
+                    if i != len(m.vertices) - 1:
+             
                         f.write(",")
-            
+             
                     f.write("\n")
-            
-            # If no vertex colors, default to 2 whites, 1 grey
-            
-            else:                                  
-            
-                for i in range(len(m.polygons) * 3):
-            
-                    if i % 3 == 0:
-            
-                        f.write("\t80,80,80,0")
-            
-                    else:
-            
-                        f.write("\t128,128,128,0")
-            
-                    if i != (len(m.polygons) * 3) - 1:
-            
+             
+                f.write("};\n\n")
+                
+                # Write normals vectors
+     
+                f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
+                
+                for i in range(len(m.vertices)):
+                
+                    poly = m.vertices[i]
+                
+                    f.write("\t"+str(round(-poly.normal.x * 4096))+","+str(round(poly.normal.z  * 4096))+","+str(round(-poly.normal.y  * 4096))+",0")
+                
+                    if i != len(m.vertices) - 1:
+                
                         f.write(",")
-            
+                
                     f.write("\n")
-            
-            f.write("};\n\n")
-            
-            # Write polygons index + type
-            
-            f.write("PRIM "+"model"+cleanName+"_index[] = {\n")
-            
-            for i in range(len(m.polygons)):
-            
-                poly = m.polygons[i]
-            
-                f.write("\t"+str(poly.vertices[0])+","+str(poly.vertices[1])+","+str(poly.vertices[2]))
                 
-                if len(poly.vertices) > 3:
-            
-                    f.write("," + str(poly.vertices[3]) + ",8")
-            
-                else:
-            
-                    f.write(",0,4")
+                f.write("};\n\n")
+     
+                # Write UVs vectors if a texture exists
                 
-                if i != len(m.polygons) - 1:
-            
-                    f.write(",")
-            
-                f.write("\n")
-            
-            f.write("};\n\n")
-            
-            # Get object's custom properties
-            
-            chkProp = {
-       
-                'isAnim':0,
-       
-                'isRigidBody':0,
-       
-                'isStaticBody':0,
-       
-                'isPrism':0,
-       
-                'isActor':0,
-       
-                'isLevel':0,
-       
-                'isBG':0,
-       
-                'isSprite':0,
-       
-                'mass': 1,
-       
-                'restitution': 0,
-       
-                'lerp': 0
-       
-            }
-            
-            for prop in chkProp:
-        
-                if m.get(prop) is not None:
-        
-                    chkProp[prop] = m[prop]
-            
-            # put isBG back to 0 if using precalculated BGs
-            
-            if not self.exp_Precalc:
-        
-                chkProp['isBG'] = 0;
-            
-            if m.get('isActor'):
-        
-                actorPtr = m.name
-            
-            if m.get('isLevel'):
-        
-                levelPtr = cleanName
-            
-            if m.get('isProp'):
-        
-                propPtr = cleanName
-
-    ## Vertex animation
+                # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
+                # bpy.context.active_object.data.uv_textures.active.data[0].image.name
+                # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath
+                # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath_from_user()
+                #
+                # get image size x, y
+                # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
+                # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
                 
-            # write vertex anim if isAnim != 0 
-            # Source : https://stackoverflow.com/questions/9138637/vertex-animation-exporter-for-blender
-            
-            if m.get("isAnim") is not None and m["isAnim"] != 0:
-                
-                # Write vertex pos
-                
-                o = bpy.data.objects[m.name]
-
-                # If an action exists with the same name as the object, use that
-                
-                if m.name in bpy.data.actions:
-                
-                    frame_start = int(bpy.data.actions[m.name].frame_range[0])
-                
-                    frame_end = int(bpy.data.actions[m.name].frame_range[1])
-                
-                else:
                     
-                    # Use scene's Start/End frames
-                    
-                    frame_start = int( bpy.context.scene.frame_start )
+                if len(m.uv_textures) != None:
+     
+                    for t in range(len(m.uv_textures)):
+     
+                        if m.uv_textures[t].data[0].image != None:
+     
+                            f.write("SVECTOR "+"model"+cleanName+"_uv[] = {\n")
+     
+                            texture_image = m.uv_textures[t].data[0].image
+     
+                            tex_width = texture_image.size[0]
+     
+                            tex_height = texture_image.size[1]
+     
+                            uv_layer = m.uv_layers[0].data
+     
+                            for i in range(len(uv_layer)):
+     
+                                u = uv_layer[i].uv
+     
+                                ux = u.x * tex_width
+     
+                                uy = u.y * tex_height
+     
+                                # ~ if self.exp_Precalc and m.get('isBG'):
+                                    # ~ f.write("\t255, 255, 0, 0") # Clamp values to 0-255 to avoid tpage overflow
+                                # ~ else:
+     
+                                f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
+     
+                                if i != len(uv_layer) - 1:
+     
+                                    f.write(",")
+     
+                                f.write("\n")
+     
+                            f.write("};\n\n")
+                            
+                            # Save UV texture to a file in ./TIM
+                            # It will have to be converted to a tim file
+
+                            if texture_image.filepath == '':
+
+                                os.makedirs(dirpath, exist_ok = 1)
+
+                                texture_image.filepath_raw = folder + os.sep + "TIM" + os.sep + CleanName(texture_image.name) + "." + texture_image.file_format
+
+                            texture_image.save()
+                            
+                # Write vertex colors vectors
+     
+                f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n")
+                 
+                # If vertex colors exist, use them
                 
-                    frame_end = int( bpy.context.scene.frame_end )
+                if len(m.vertex_colors) != 0:           
                 
-                nFrame = frame_end - frame_start
+                    colors = m.vertex_colors[0].data
                 
-                c = 0;
+                    for i in range(len(colors)):
                 
-                tmp_meshes = []
+                        f.write("\t"+str(int(colors[i].color.r*255))+","+str(int(colors[i].color.g*255))+","+str(int(colors[i].color.b*255))+", 0")
                 
-                for i in range(frame_start, frame_end):
-                    
-                    bpy.context.scene.frame_set(i)
-                    
-                    bpy.context.scene.update()
-
-                    nm = o.to_mesh(bpy.context.scene, True, 'PREVIEW')
-                                        
-                    if i == frame_start :
-                    
-                        f.write("VANIM model"+cleanName+"_anim = {\n" +
-                                "\t" + str(nFrame) + ",\n" +
-                                "\t" + str(len(nm.vertices)) + ",\n" + 
-                                "\t0,\n" + 
-                                "\t0,\n" + 
-                                "\t1,\n" + 
-                                "\t" + str(chkProp['lerp']) + ",\n" + 
-                                "\t{\n"
-                                )
-                    
-                    for v in range(len(nm.vertices)):
-                    
-                        if v == 0:
-
-                            f.write("\t\t//Frame %d\n" % i)
-
-                        f.write("\t\t{ " + str(round(nm.vertices[v].co.x*scale)) + "," + str(round(-nm.vertices[v].co.z*scale)) + "," + str(round(nm.vertices[v].co.y*scale)) + " }")
-
-                        if c != len(nm.vertices) * (nFrame) * 3 - 3:
-
-                            f.write(",\n")
-
-                        if v == len(nm.vertices) - 1:
-
-                            f.write("\n")
-
-                        c += 3;
-
-                    tmp_meshes.append(nm)
-
-                f.write("\n\t}\n};\n")
-
-                # Remove meshe's working copies
+                        if i != len(colors) - 1:
                 
-                for nm in tmp_meshes:
-
-                    bpy.data.meshes.remove(nm)
+                            f.write(",")
                 
-            # bpy.data.objects[bpy.data.meshes[0].name].active_shape_key.value : access shape_key
-            
-    ## Mesh world transform setup
-            
-            # Write object matrix, rot and pos vectors
-            
-            f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
-                    "VECTOR model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
-                    "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
-                    "short model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
-                    "short model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
-                    "short model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
-                    "short model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
-                    "short model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
-                    "short model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
-                    "short model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
-                    "short model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
-                    "long model"+cleanName+"_p = 0;\n" +
-                    "long model"+cleanName+"_OTz = 0;\n" +
-                    "BODY model"+cleanName+"_body = {\n" +
-                    "\t{0, 0, 0, 0},\n" +
-                    "\t" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0,\n" +
-                    "\t"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0,\n" +
-                    "\t" + str(int(chkProp['mass'])) + ",\n" +
-                    "\tONE/" + str(int(chkProp['mass'])) + ",\n" +
-                    # write min and max values of AABBs on each axis
-                    "\t" + str(round(min(Xvals) * scale)) + "," + str(round(min(Zvals) * scale)) + "," + str(round(min(Yvals) * scale)) + ", 0,\n" +
-                    "\t" + str(round(max(Xvals) * scale)) + "," + str(round(max(Zvals) * scale)) + "," + str(round(max(Yvals) * scale)) + ", 0,\n" +
-                    "\t" + str(int(chkProp['restitution'])) + ",\n" + 
-                    # ~ "\tNULL\n" + 
-                    "\t};\n\n")
- 
-            # Write TMESH struct
-            
-            f.write("TMESH "+"model"+cleanName+" = {\n")
-            
-            f.write("\t"+"model"+cleanName+"_mesh,  \n")
-            
-            f.write("\t"+"model"+cleanName+"_normal,\n")
-            
-            if len(m.uv_textures) != None:
-            
-                for t in range(len(m.uv_textures)):
-            
-                    if m.uv_textures[0].data[0].image != None:
-            
-                        f.write("\t"+"model"+cleanName+"_uv,\n")
-            
-                    else:
-            
-                        f.write("\t0,\n")
-            else:
-            
-                f.write("\t0,\n")
-            
-            f.write("\t"+"model"+cleanName+"_color, \n")
-            
-            # According to libgte.h, TMESH.len should be # of vertices. Meh...
-            
-            f.write("\t"+str(len(m.polygons))+"\n")
-            
-            f.write("};\n\n")
-            
-            # Write texture binary name and declare TIM_IMAGE
-            # By default, loads the file from the ./TIM folder
-            
-            if len(m.uv_textures) != None:
-
-                for t in range(len(m.uv_textures)): 
-
-                    if m.uv_textures[0].data[0].image != None:
-                        
-                        tex_name = texture_image.name
-
-                        prefix   = str.partition(tex_name, ".")[0].replace('-','_')
-
-                        prefix   = CleanName(prefix)
-
-                        # Add Tex name to list if it's not in there already
-
-                        if prefix in timList:
-
-                            break
-
+                        f.write("\n")
+                
+                # If no vertex colors, default to 2 whites, 1 grey
+                
+                else:                                  
+                
+                    for i in range(len(m.polygons) * 3):
+                
+                        if i % 3 == 0:
+                
+                            f.write("\t80,80,80,0")
+                
                         else:
-                            
-                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
-
-                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
-
-                            f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
-
-                            f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
-                            
-                            timList.append(prefix)
-
-            f.write("MESH mesh"+cleanName+" = {\n")
-            
-            f.write("\t&model"+ cleanName +",\n")
-            
-            f.write("\tmodel" + cleanName + "_index,\n")
-            
-            
-
-            if len(m.uv_textures) != None:
-            
-                for t in range(len(m.uv_textures)):
-            
-                    if m.uv_textures[0].data[0].image != None:
-            
-                        tex_name = texture_image.name
-
-                        prefix   = str.partition(tex_name, ".")[0].replace('-','_')
-
-                        prefix   = CleanName(prefix)
-                        
-                        f.write("\t&tim_"+ prefix + ",\n")
-                   
-                        f.write("\t_binary_TIM_" + prefix + "_tim_start,\n")
-                   
+                
+                            f.write("\t128,128,128,0")
+                
+                        if i != (len(m.polygons) * 3) - 1:
+                
+                            f.write(",")
+                
+                        f.write("\n")
+                
+                f.write("};\n\n")
+                
+                # Write polygons index + type
+                
+                f.write("PRIM "+"model"+cleanName+"_index[] = {\n")
+                
+                for i in range(len(m.polygons)):
+                
+                    poly = m.polygons[i]
+                
+                    f.write("\t"+str(poly.vertices[0])+","+str(poly.vertices[1])+","+str(poly.vertices[2]))
+                    
+                    if len(poly.vertices) > 3:
+                
+                        f.write("," + str(poly.vertices[3]) + ",8")
+                
                     else:
-                   
-                        f.write("\t0,\n" +
-                   
-                                "\t0,\n")     
-            else:
                 
-                f.write("\t0,\n" +
+                        f.write(",0,4")
+                    
+                    if i != len(m.polygons) - 1:
                 
-                        "\t0,\n")     
+                        f.write(",")
                 
-            f.write("\t&model"+cleanName+"_matrix,\n" +
-                    "\t&model"+cleanName+"_pos,\n" +
-                    "\t&model"+cleanName+"_rot,\n" +
-                    "\t&model"+cleanName+"_isRigidBody,\n" +
-                    "\t&model"+cleanName+"_isStaticBody,\n" +
-                    "\t&model"+cleanName+"_isPrism,\n" +
-                    "\t&model"+cleanName+"_isAnim,\n" +
-                    "\t&model"+cleanName+"_isActor,\n" +
-                    "\t&model"+cleanName+"_isLevel,\n" +
-                    "\t&model"+cleanName+"_isBG,\n" +
-                    "\t&model"+cleanName+"_isSprite,\n" +
-                    "\t&model"+cleanName+"_p,\n" +
-                    "\t&model"+cleanName+"_OTz,\n" +
-                    "\t&model"+cleanName+"_body,\n")
+                    f.write("\n")
+                
+                f.write("};\n\n")
+                
+                # Get object's custom properties
+                
+                chkProp = {
+           
+                    'isAnim':0,
+           
+                    'isRigidBody':0,
+           
+                    'isStaticBody':0,
+           
+                    'isPrism':0,
+           
+                    'isActor':0,
+           
+                    'isLevel':0,
+           
+                    'isBG':0,
+           
+                    'isSprite':0,
+           
+                    'mass': 1,
+           
+                    'restitution': 0,
+           
+                    'lerp': 0
+           
+                }
+                
+                for prop in chkProp:
+            
+                    if m.get(prop) is not None:
+            
+                        chkProp[prop] = m[prop]
+                
+                # put isBG back to 0 if using precalculated BGs
+                
+                if not self.exp_Precalc:
+            
+                    chkProp['isBG'] = 0;
+                
+                if m.get('isActor'):
+            
+                    actorPtr = m.name
+                
+                if m.get('isLevel'):
+            
+                    levelPtr = cleanName
+                
+                if m.get('isProp'):
+            
+                    propPtr = cleanName
+
+        ## Vertex animation
                     
-            if m.get("isAnim") is not None and m["isAnim"] != 0:
+                # write vertex anim if isAnim != 0 
+                # Source : https://stackoverflow.com/questions/9138637/vertex-animation-exporter-for-blender
+                
+                if m.get("isAnim") is not None and m["isAnim"] != 0:
                     
-                    f.write("\t&model"+cleanName+"_anim,\n")
-            else:
+                    # Write vertex pos
                     
+                    o = bpy.data.objects[m.name]
+
+                    # If an action exists with the same name as the object, use that
+                    
+                    if m.name in bpy.data.actions:
+                    
+                        frame_start = int(bpy.data.actions[m.name].frame_range[0])
+                    
+                        frame_end = int(bpy.data.actions[m.name].frame_range[1])
+                    
+                    else:
+                        
+                        # Use scene's Start/End frames
+                        
+                        frame_start = int( bpy.context.scene.frame_start )
+                    
+                        frame_end = int( bpy.context.scene.frame_end )
+                    
+                    nFrame = frame_end - frame_start
+                    
+                    c = 0;
+                    
+                    tmp_meshes = []
+                    
+                    for i in range(frame_start, frame_end):
+                        
+                        bpy.context.scene.frame_set(i)
+                        
+                        bpy.context.scene.update()
+
+                        nm = o.to_mesh(bpy.context.scene, True, 'PREVIEW')
+                                            
+                        if i == frame_start :
+                        
+                            f.write("VANIM model"+cleanName+"_anim = {\n" +
+                                    "\t" + str(nFrame) + ",\n" +
+                                    "\t" + str(len(nm.vertices)) + ",\n" + 
+                                    "\t0,\n" + 
+                                    "\t0,\n" + 
+                                    "\t1,\n" + 
+                                    "\t" + str(chkProp['lerp']) + ",\n" + 
+                                    "\t{\n"
+                                    )
+                        
+                        for v in range(len(nm.vertices)):
+                        
+                            if v == 0:
+
+                                f.write("\t\t//Frame %d\n" % i)
+
+                            f.write("\t\t{ " + str(round(nm.vertices[v].co.x*scale)) + "," + str(round(-nm.vertices[v].co.z*scale)) + "," + str(round(nm.vertices[v].co.y*scale)) + " }")
+
+                            if c != len(nm.vertices) * (nFrame) * 3 - 3:
+
+                                f.write(",\n")
+
+                            if v == len(nm.vertices) - 1:
+
+                                f.write("\n")
+
+                            c += 3;
+
+                        tmp_meshes.append(nm)
+
+                    f.write("\n\t}\n};\n")
+
+                    # Remove meshe's working copies
+                    
+                    for nm in tmp_meshes:
+
+                        bpy.data.meshes.remove(nm)
+                    
+                # bpy.data.objects[bpy.data.meshes[0].name].active_shape_key.value : access shape_key
+                
+        ## Mesh world transform setup
+                
+                # Write object matrix, rot and pos vectors
+                
+                f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
+                        "VECTOR model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
+                        "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
+                        "short model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
+                        "short model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
+                        "short model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
+                        "short model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
+                        "short model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
+                        "short model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
+                        "short model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
+                        "short model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
+                        "long model"+cleanName+"_p = 0;\n" +
+                        "long model"+cleanName+"_OTz = 0;\n" +
+                        "BODY model"+cleanName+"_body = {\n" +
+                        "\t{0, 0, 0, 0},\n" +
+                        "\t" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0,\n" +
+                        "\t"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0,\n" +
+                        "\t" + str(int(chkProp['mass'])) + ",\n" +
+                        "\tONE/" + str(int(chkProp['mass'])) + ",\n" +
+                        # write min and max values of AABBs on each axis
+                        "\t" + str(round(min(Xvals) * scale)) + "," + str(round(min(Zvals) * scale)) + "," + str(round(min(Yvals) * scale)) + ", 0,\n" +
+                        "\t" + str(round(max(Xvals) * scale)) + "," + str(round(max(Zvals) * scale)) + "," + str(round(max(Yvals) * scale)) + ", 0,\n" +
+                        "\t" + str(int(chkProp['restitution'])) + ",\n" + 
+                        # ~ "\tNULL\n" + 
+                        "\t};\n\n")
+     
+                # Write TMESH struct
+                
+                f.write("TMESH "+"model"+cleanName+" = {\n")
+                
+                f.write("\t"+"model"+cleanName+"_mesh,  \n")
+                
+                f.write("\t"+"model"+cleanName+"_normal,\n")
+                
+                if len(m.uv_textures) != None:
+                
+                    for t in range(len(m.uv_textures)):
+                
+                        if m.uv_textures[0].data[0].image != None:
+                
+                            f.write("\t"+"model"+cleanName+"_uv,\n")
+                
+                        else:
+                
+                            f.write("\t0,\n")
+                else:
+                
                     f.write("\t0,\n")
+                
+                f.write("\t"+"model"+cleanName+"_color, \n")
+                
+                # According to libgte.h, TMESH.len should be # of vertices. Meh...
+                
+                f.write("\t"+str(len(m.polygons))+"\n")
+                
+                f.write("};\n\n")
+                
+                # Write texture binary name and declare TIM_IMAGE
+                # By default, loads the file from the ./TIM folder
+                
+                if len(m.uv_textures) != None:
+
+                    for t in range(len(m.uv_textures)): 
+
+                        if m.uv_textures[0].data[0].image != None:
+                            
+                            tex_name = texture_image.name
+
+                            prefix   = str.partition(tex_name, ".")[0].replace('-','_')
+
+                            prefix   = CleanName(prefix)
+
+                            # Add Tex name to list if it's not in there already
+
+                            if prefix in timList:
+
+                                break
+
+                            else:
+                                
+                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+
+                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+
+                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+
+                                f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
+                                
+                                timList.append(prefix)
+
+                f.write("MESH mesh"+cleanName+" = {\n")
+                
+                f.write("\t&model"+ cleanName +",\n")
+                
+                f.write("\tmodel" + cleanName + "_index,\n")
+                
+                
+
+                if len(m.uv_textures) != None:
+                
+                    for t in range(len(m.uv_textures)):
+                
+                        if m.uv_textures[0].data[0].image != None:
+                
+                            tex_name = texture_image.name
+
+                            prefix   = str.partition(tex_name, ".")[0].replace('-','_')
+
+                            prefix   = CleanName(prefix)
+                            
+                            f.write("\t&tim_"+ prefix + ",\n")
+                       
+                            f.write("\t_binary_TIM_" + prefix + "_tim_start,\n")
+                       
+                        else:
+                       
+                            f.write("\t0,\n" +
+                       
+                                    "\t0,\n")     
+                else:
                     
+                    f.write("\t0,\n" +
                     
-            f.write(
-                    "\t0" +
-                    "\n};\n\n"
-                    )
+                            "\t0,\n")     
+                    
+                f.write("\t&model"+cleanName+"_matrix,\n" +
+                        "\t&model"+cleanName+"_pos,\n" +
+                        "\t&model"+cleanName+"_rot,\n" +
+                        "\t&model"+cleanName+"_isRigidBody,\n" +
+                        "\t&model"+cleanName+"_isStaticBody,\n" +
+                        "\t&model"+cleanName+"_isPrism,\n" +
+                        "\t&model"+cleanName+"_isAnim,\n" +
+                        "\t&model"+cleanName+"_isActor,\n" +
+                        "\t&model"+cleanName+"_isLevel,\n" +
+                        "\t&model"+cleanName+"_isBG,\n" +
+                        "\t&model"+cleanName+"_isSprite,\n" +
+                        "\t&model"+cleanName+"_p,\n" +
+                        "\t&model"+cleanName+"_OTz,\n" +
+                        "\t&model"+cleanName+"_body,\n")
+                        
+                if m.get("isAnim") is not None and m["isAnim"] != 0:
+                        
+                        f.write("\t&model"+cleanName+"_anim,\n")
+                else:
+                        
+                        f.write("\t0,\n")
+                        
+                        
+                f.write(
+                        "\t0" +
+                        "\n};\n\n"
+                        )
+        
+        # Remove portals from mesh list as we don't want them to be exported
+        
+        meshList = list(bpy.data.meshes)
+        
+        portalList = []
+        
+        for mesh in meshList:
+            
+            if mesh.get('isPortal'):
+                
+                meshList = [i for i in meshList if i != mesh]
+            
+                # Nasty way of removing all occurrences of the mesh
+                # ~ try:
+                    # ~ while True:
+                        # ~ meshList.remove(mesh)
+                # ~ except ValueError:
+                    # ~ pass
+                
+                portalList.append( bpy.data.objects[mesh.name] )
+        
+        f.write("MESH * meshes[" + str(len(meshList)) + "] = {\n")
 
-        f.write("MESH * meshes[" + str(len(bpy.data.meshes)) + "] = {\n")
+        for k in range(len(meshList)):
 
-        for k in range(len(bpy.data.meshes)):
-
-            cleanName = CleanName(bpy.data.meshes[k].name)
+            cleanName = CleanName(meshList[k].name)
 
             f.write("\t&mesh" + cleanName)
 
-            if k != len(bpy.data.meshes) - 1:
+            if k != len(meshList) - 1:
 
                 f.write(",\n")
 
@@ -1153,9 +1232,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                    
                     "\t&camPos_" + CleanName(defaultCam) + ",\n" +
                    
-                    "\t0,\n" + 
-                   
-                    "\t0\n" + 
+                    "\t0,\n 0,\n {0},\n {0},\n 0,\n 0\n" + 
                    
                     "};\n\n")
         
@@ -1163,12 +1240,82 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         for camera in camAngles:
         
-            # Cast a ray from camera to each Rigid/Static body to determine visibility
-            
             # Get current scene 
             
             scene = bpy.context.scene
             
+            # List of portals
+            
+            visiblePortal = []
+            
+            for portal in portalList:
+                
+                if isInFrame(scene, camera, portal):
+                    
+                    # Get normalized direction vector between camera and portal
+                    
+                    dirToTarget = portal.location - camera.location
+                    
+                    dirToTarget.normalize() 
+                    
+                    # Cast a ray from camera to body to determine visibility
+                    
+                    result, location, normal, index, hitObject, matrix = scene.ray_cast( camera.location, dirToTarget )
+                    
+                    # If hitObject is portal, nothing is obstructing it's visibility
+                    
+                    if hitObject is not None:
+                        
+                        if hitObject in portalList:
+                            
+                            if hitObject == portal:
+                                
+                                # ~ print(str(camera) + str(hitObject))
+                                
+                                visiblePortal.append(hitObject)
+                                
+            # ~ print(str(camera) + ":" + str(visiblePortal))
+            
+            # If more than one portal is visible, only keep the two closest ones
+            
+            if len( visiblePortal ) > 2:
+                
+                # Store the tested portals distance to camera
+                
+                testDict = {}
+                
+                for tested in visiblePortal:
+            
+                    # Get distance between cam and tested portal
+            
+                    distToTested = sqrt( ( tested.location - camera.location ) * ( tested.location - camera.location ) )
+
+                    # Store distance
+            
+                    testDict[distToTested] = tested
+                
+                # If dictionary has more than 2 portals, remove the farthest ones
+                
+                while len( testDict ) > 2:
+                    
+                    del testDict[max(testDict)]
+
+                # Reset visible portal
+
+                visiblePortal.clear()
+                    
+                # Get the portals stored in the dict and store them in the list
+                
+                for Dportal in testDict:
+                
+                    visiblePortal.append(testDict[Dportal])
+                
+                # Revert to find original order back
+                
+                visiblePortal.reverse()
+                
+                # ~ print( str( camera ) + " : " + str( visiblePortal ) )
+                
             # List of target found visible
             
             visibleTarget = []
@@ -1177,9 +1324,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Chech object is in view frame
                 
-                inViewFrame = isInFrame(scene, camera, target)
-                
-                if inViewFrame:
+                if isInFrame(scene, camera, target):
                     
                     # Get normalized direction vector between camera and object
                     
@@ -1188,7 +1333,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     dirToTarget.normalize() 
                      
                     # Cast ray from camera to object
-                    # Unpack results in several variables. 
+                    # Unpack results into several variables. 
                     # We're only interested in 'hitObject' though
                     
                     result, location, normal, index, hitObject, matrix = scene.ray_cast( camera.location, dirToTarget )
@@ -1199,9 +1344,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         if hitObject in rayTargets:
                                 
-                            print(camera.name + ":" + hitObject.name + " - " + target.name )
-                            
                             visibleTarget.append(target)
+            
+            if bpy.data.objects[ actorPtr ] not in visibleTarget:
+                
+                visibleTarget.append( bpy.data.objects[ actorPtr ] )
+
             
             prefix = CleanName(camera.name)
             
@@ -1227,7 +1375,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                     "\t_binary_TIM_bg_" + prefix + "_tim_start,\n" +
                     
-                    "\t" + str( len( visibleTarget ) ) + ",\n" +
+                    "\t// Write quad NW, NE, SE, SW\n")
+            
+            # If visiblePoratl length is under 2, this means there's only one portal, hence a fw portal
+            
+            if len( visiblePortal ) < 2 :
+
+                f.write("\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n")
+                
+            for portal in visiblePortal:
+            
+                s = objVertWtoS( scene, camera, portal )
+                
+                # Write quad NW, NE, SE, SW
+                
+                f.write("\t{\n\t\t" + 
+                            
+                            "{ " + str( int (s[3].x ) ) + ", " + str( int (s[3].y ) ) + ", " + str( int (s[3].z ) ) + ", 0 },\n\t\t" +
+                
+                            "{ " + str( int (s[2].x ) ) + ", " + str( int (s[2].y ) ) + ", " + str( int (s[2].z ) ) + ", 0 },\n\t\t" +
+                            
+                            "{ " + str( int (s[0].x ) ) + ", " + str( int (s[0].y ) ) + ", " + str( int (s[0].z ) ) + ", 0 },\n\t\t" +
+                            
+                            "{ " + str( int (s[1].x ) ) + ", " + str( int (s[1].y ) ) + ", " + str( int (s[1].z ) ) + ", 0 }\n" +
+
+                      "\t},\n" )
+            
+            f.write("\t" + str( len( visibleTarget ) ) + ",\n" +
             
                     "\t{\n")
 
@@ -1256,9 +1430,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("};\n\n")
         
     ## Spatial Partitioning
-    
-        # ToDo :
-        # Auto-detect which plane the actor is on and set that as curNode
     
         # Planes in the level - dict of strings 
 
@@ -1292,7 +1463,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             # Only loop through meshes
         
-            if o.type == 'MESH':
+            if o.type == 'MESH' and not o.data.get('isPortal'):
         
                 # Get Level planes coordinates
         
@@ -1326,7 +1497,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # For each object not a plane, get its coordinates
                 
-                # ~ if not o.data.get('isLevel'):
                 if not o.data.get('isLevel'):
                     
                     # World matrix is used to convert local to global coordinates
@@ -1416,7 +1586,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         levelPtr = p
                         nodePtr = p
             
-            # Add actor in every plane
+            # Add moveable objects in every plane
             
             for moveable in Moveables:
                 
@@ -1617,7 +1787,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         if defaultCam != 'NULL':
         
-            bpy.context.scene.camera = bpy.data.objects[defaultCam]
+            bpy.context.scene.camera = bpy.data.objects[ defaultCam ]
 
         f.close()
         
