@@ -18,6 +18,8 @@ import bmesh
 
 import unicodedata
 
+import subprocess
+
 from math import radians, degrees, floor, cos, sin, sqrt
 
 from mathutils import Vector
@@ -36,6 +38,8 @@ from bpy_extras.io_utils import (ExportHelper,
 
 from bpy_extras.object_utils import world_to_camera_view
  
+from PIL import Image
+
 class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
     bl_idname       = "export_psx.c";
@@ -71,10 +75,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         name="Use precalculated BGs",
 
-        description="Set the BGs UV to black",
+        description="Render backgrounds and converts them to TIMs",
 
         default=False,
     )
+    
+    # ~ exp_ShowPortals = BoolProperty(
+    
+        # ~ name="Render Portals in precalculated BGs",
+        
+        # ~ description="Useful for debugging",
+        
+        # ~ default=False,    
+    # ~ )
     
     def execute(self, context):
 
@@ -248,6 +261,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 return "intersect"
 
+        def objVertLtoW(target):
+            
+            worldPos = []
+            
+            mw = target.matrix_world
+            
+            mesh = bpy.data.meshes[ target.name ]
+            
+            for vertex in mesh.vertices:
+                
+                worldPos.append( mw * vertex.co * scale )
+                
+            return worldPos
+
         def objVertWtoS(scene, cam, target, toScale = 1):
 
             screenPos = []
@@ -284,7 +311,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     vector.x = max ( 0, min ( resX, int( resX * vector.x ) ) )
             
-                    vector.y = max ( 0, min ( resY, int( resY * vector.y ) ) )
+                    vector.y = resY - max ( 0, min ( resY, int( resY * vector.y ) ) )
                     
                     vector.z = int( vector.z )
                                 
@@ -329,7 +356,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # If using precalculated BG, render and export them to ./TIM/
         
         if self.exp_Precalc:
-            
+
             # Create folder if it doesn't exist
             
             os.makedirs(dirpath, exist_ok = 1)
@@ -357,6 +384,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                 if o.type == 'CAMERA' and o.name.startswith("camPath"):
                     
+                    filepath = folder + os.sep + "TIM" + os.sep 
+                    
+                    filename = "bg_" + CleanName(o.name)
+                    
+                    fileext = "." + str(bpy.context.scene.render.image_settings.file_format).lower()
+                    
                     # Set camera as active
 
                     bpy.context.scene.camera = o
@@ -365,7 +398,30 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     bpy.ops.render.render()
                     
-                    bpy.data.images["Render Result"].save_render(folder + os.sep + "TIM" + os.sep + "bg_" + CleanName(o.name) + "." + str(bpy.context.scene.render.image_settings.file_format).lower())
+                    bpy.data.images["Render Result"].save_render( filepath + filename + fileext )
+                    
+                    # Convert to 256 colors png with PILlow
+                    # TODO : Add Pillow lib
+                    
+                    # ~ bgFile = Image.open( filepath + filename + fileext )
+                    
+                    # ~ bgFile = bgFile.convert('RGB').convert('P', palette=Image.ADAPTIVE )
+                    
+                    # ~ bgFile.save( filepath + filename + fileext ) 
+                    
+                    # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
+                    
+                    exe = ""
+                    
+                    if os.name == 'nt':
+                        
+                        exe = ".exe"
+                    
+                    # ImageMagick alternative
+                    
+                    # ~ subprocess.call( [ "convert", filepath + filename + fileext, "-colors", "256", filepath + filename + fileext ] )
+                        
+                    # ~ subprocess.call( [ "img2tim" + exe, "-t", "-bpp", "8", "-org", "320", "0", "-plt" , "0", "481","-o", filepath + filename + ".tim", filepath + filename + fileext ] )
                     
                     # Add camera object to camAngles
                     
@@ -533,7 +589,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             if bpy.data.objects[o].type == 'MESH':
                 
-                if bpy.data.objects[o].data.get('isRigidBody') or bpy.data.objects[o].data.get('isStaticBody') :
+                if ( 
+                    
+                    bpy.data.objects[o].data.get('isRigidBody') or 
+                    
+                    bpy.data.objects[o].data.get('isStaticBody')
+                    
+                    #or bpy.data.objects[o].data.get('isPortal')
+                    
+                   ):
     
                     rayTargets.append(bpy.data.objects[o])
             
@@ -1324,7 +1388,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Chech object is in view frame
                 
-                if isInFrame(scene, camera, target):
+                if isInFrame(scene, camera, target):# and not target.data.get('isPortal') :
                     
                     # Get normalized direction vector between camera and object
                     
@@ -1336,15 +1400,53 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     # Unpack results into several variables. 
                     # We're only interested in 'hitObject' though
                     
-                    result, location, normal, index, hitObject, matrix = scene.ray_cast( camera.location, dirToTarget )
+                    result, hitLocation, normal, index, hitObject, matrix = scene.ray_cast( camera.location, dirToTarget )
                     
                     # If hitObject is the same as target, nothing is obstructing it's visibility
                     
                     if hitObject is not None:
                         
-                        if hitObject in rayTargets:
+                        # If hit object is a portal, cast a new ray from hit location to target
+                        
+                        if hitObject.data.get('isPortal'):
+                        
+                            # Find out if we're left or right of portal
+                            
+                            v0 = hitObject.matrix_world * hitObject.data.vertices[0].co
+                            v1 = hitObject.matrix_world * hitObject.data.vertices[1].co
+                            
+                            side = checkLine(v0.x, v0.y, v1.x, v1.y , camera.location.x, camera.location.y, camera.location.x, camera.location.y )
+                            
+                            if side == 'front':
+                                
+                                offset = [ 1.001, 0.999, 0.999 ]
+                            
+                            else :
+                                
+                                offset = [ 0.999, 1.001, 1.001 ]
+                                
+                            origin = Vector( ( hitLocation.x * offset[0], hitLocation.y * offset[1], hitLocation.z * offset[2]  ) )
+                            
+                            print(hitObject.name + " is a portal at " + str( hitLocation ) + " N : " + str(normal) + " - " + side + "Or : " + str(origin) )
+                        
+                            result, hitLocationPort, normal, index, hitObjectPort, matrix = scene.ray_cast( origin , dirToTarget )
+                            
+                            print( camera.name + " : recasting from " + str( origin ) + " to " + target.name )
+                            
+                            if hitObjectPort is not None:
+                                
+                                if hitObjectPort in rayTargets:
+
+                                    print(hitObjectPort.name)
+
+                                    visibleTarget.append(target)
+                        
+                        elif hitObject in rayTargets:
                                 
                             visibleTarget.append(target)
+                        
+            
+            print("\n")
             
             if bpy.data.objects[ actorPtr ] not in visibleTarget:
                 
@@ -1384,22 +1486,40 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n")
                 
             for portal in visiblePortal:
-            
-                s = objVertWtoS( scene, camera, portal )
                 
-                # Write quad NW, NE, SE, SW
+                w = objVertLtoW(portal)
                 
-                f.write("\t{\n\t\t" + 
+                f.write("// " + str(portal) + "\n" )
                             
-                            "{ " + str( int (s[3].x ) ) + ", " + str( int (s[3].y ) ) + ", " + str( int (s[3].z ) ) + ", 0 },\n\t\t" +
+                # Write portal'vertices world coordinates NW, NE, SE, SW
                 
-                            "{ " + str( int (s[2].x ) ) + ", " + str( int (s[2].y ) ) + ", " + str( int (s[2].z ) ) + ", 0 },\n\t\t" +
+                f.write("\t{\n\t\t" +
                             
-                            "{ " + str( int (s[0].x ) ) + ", " + str( int (s[0].y ) ) + ", " + str( int (s[0].z ) ) + ", 0 },\n\t\t" +
+                            "{ " + str( int (w[3].x ) ) + ", " + str( int (w[3].y ) ) + ", " + str( int (w[3].z ) ) + ", 0 },\n\t\t" +
+                
+                            "{ " + str( int (w[2].x ) ) + ", " + str( int (w[2].y ) ) + ", " + str( int (w[2].z ) ) + ", 0 },\n\t\t" +
                             
-                            "{ " + str( int (s[1].x ) ) + ", " + str( int (s[1].y ) ) + ", " + str( int (s[1].z ) ) + ", 0 }\n" +
+                            "{ " + str( int (w[0].x ) ) + ", " + str( int (w[0].y ) ) + ", " + str( int (w[0].z ) ) + ", 0 },\n\t\t" +
+                            
+                            "{ " + str( int (w[1].x ) ) + ", " + str( int (w[1].y ) ) + ", " + str( int (w[1].z ) ) + ", 0 }\n" +
 
                       "\t},\n" )
+
+                # UNUSED : Screen coords
+                      
+                # ~ s = objVertWtoS( scene, camera, portal )
+                
+                # ~ f.write("\t{\n\t\t" + 
+                            
+                            # ~ "{ " + str( int (s[3].x ) ) + ", " + str( int (s[3].y ) ) + ", " + str( int (s[3].z ) ) + ", 0 },\n\t\t" +
+                
+                            # ~ "{ " + str( int (s[2].x ) ) + ", " + str( int (s[2].y ) ) + ", " + str( int (s[2].z ) ) + ", 0 },\n\t\t" +
+                            
+                            # ~ "{ " + str( int (s[0].x ) ) + ", " + str( int (s[0].y ) ) + ", " + str( int (s[0].z ) ) + ", 0 },\n\t\t" +
+                            
+                            # ~ "{ " + str( int (s[1].x ) ) + ", " + str( int (s[1].y ) ) + ", " + str( int (s[1].z ) ) + ", 0 }\n" +
+
+                      # ~ "\t},\n" )
             
             f.write("\t" + str( len( visibleTarget ) ) + ",\n" +
             
@@ -1512,8 +1632,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         Yvalues.append( (mw * v.co).y )
                     
                     LvlObjects[o.name] = {'x1' : min(Xvalues),
+                    
                                           'y1' : min(Yvalues),
+                    
                                           'x2' : max(Xvalues),
+                    
                                           'y2' : max(Yvalues)}
 
                     # Clear X/Y lists for next iteration
