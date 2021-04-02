@@ -89,6 +89,16 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # ~ default=False,    
     # ~ )
     
+    exp_useIM = BoolProperty(
+    
+        name = "Use ImageMagick",
+    
+        description = "Use Image Magick's convert tool to convert PNGs to 8/4bpp",
+    
+        default = False
+    )
+    
+    
     def execute(self, context):
 
         def triangulate_object(obj): 
@@ -364,8 +374,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Set file format config
             
             bpy.context.scene.render.image_settings.file_format = 'PNG'
-            bpy.context.scene.render.image_settings.quality = 100
-            bpy.context.scene.render.image_settings.compression = 0
+            
+            # ~ bpy.context.scene.render.image_settings.quality = 100
+            
+            # ~ bpy.context.scene.render.image_settings.compression = 0
+            
             bpy.context.scene.render.image_settings.color_depth = '8'
             
             # Get active cam
@@ -400,16 +413,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     bpy.data.images["Render Result"].save_render( filepath + filename + fileext )
                     
-                    # Convert to 256 colors png with PILlow
-                    # TODO : Add Pillow lib
-                    
-                    # ~ bgFile = Image.open( filepath + filename + fileext )
-                    
-                    # ~ bgFile = bgFile.convert('RGB').convert('P', palette=Image.ADAPTIVE )
-                    
-                    # ~ bgFile.save( filepath + filename + fileext ) 
-                    
-                    # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
+                    # Convert to 256 colors png with pngquant ( https://pngquant.org/ )
+
+                    # For windows users
                     
                     exe = ""
                     
@@ -417,11 +423,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         exe = ".exe"
                     
-                    # ImageMagick alternative
+                    # 8bpp
                     
-                    # ~ subprocess.call( [ "convert", filepath + filename + fileext, "-colors", "256", filepath + filename + fileext ] )
+                    subprocess.call( [ "pngquant" + exe, "256", filepath + filename + fileext, "-o", filepath + filename + fileext, "--force" ] )
+
+                    # 4bpp
+
+                    # ~ subprocess.call( [ "pngquant" + exe, "16", filepath + filename + fileext, "-o", filepath + filename + fileext, "--force" ] )
+
+                    if self.exp_useIM:
+
+                        # ImageMagick alternative
                         
-                    # ~ subprocess.call( [ "img2tim" + exe, "-t", "-bpp", "8", "-org", "320", "0", "-plt" , "0", "481","-o", filepath + filename + ".tim", filepath + filename + fileext ] )
+                        subprocess.call( [ "convert" + exe, filepath + filename + fileext, "-colors", "256", filepath + filename + fileext ] )
+                    
+                    # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
+                    
+                    subprocess.call( [ "img2tim" + exe, "-t", "-bpp", "8", "-org", "320", "0", "-plt" , "0", "481","-o", filepath + filename + ".tim", filepath + filename + fileext ] )
                     
                     # Add camera object to camAngles
                     
