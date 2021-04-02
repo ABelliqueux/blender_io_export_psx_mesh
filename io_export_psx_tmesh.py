@@ -1464,6 +1464,58 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 visibleTarget.append( bpy.data.objects[ actorPtr ] )
             
+            # If visiblePortal length is under 2, this means there's only one portal
+            
+            # Empty strings to be populated depending on portal position (left/right of screen)
+            
+            before = ''
+            
+            after  = ''
+            
+            if len( visiblePortal ) < 2 :
+                
+                # Find wich side of screen the portal is on. left side : portal == bw, right side : portal == fw
+                
+                screenCenterX = int( scene.render.resolution_x / 2 )
+                
+                screenY = int( scene.render.resolution_y )
+                
+                # Get vertices screen coordinates
+                
+                s = objVertWtoS(scene, camera, visiblePortal[0])
+                
+                # Check line
+                
+                side = checkLine( 
+                                    screenCenterX, 0, screenCenterX, screenY,
+                                
+                                    s[1].x,
+                                
+                                    s[1].y,
+                                
+                                    s[3].x,
+                                
+                                    s[3].y 
+                                )
+                
+                
+                # If front == right of screen : fw
+                
+                if side == "front":
+                    
+                    # ~ print(str(visiblePortal[0]) + ' : fw')
+
+                    before = "\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n"
+
+                # If back == left of screen : bw
+                
+                else :
+                    
+                    # ~ print(str(visiblePortal[0]) + " : bw")
+                
+                    after = "\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n"
+            
+            
             prefix = CleanName(camera.name)
             
             # Include Tim data 
@@ -1490,17 +1542,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     "\t// Write quad NW, NE, SE, SW\n")
             
-            # If visiblePoratl length is under 2, this means there's only one portal, hence a fw portal
-            
-            if len( visiblePortal ) < 2 :
-
-                f.write("\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n")
+            f.write( before )
                 
             for portal in visiblePortal:
                 
                 w = objVertLtoW(portal)
                 
-                f.write("// " + str(portal) + "\n" )
+                # ~ f.write("\t// " + str(portal) + "\n" )
                             
                 # Write portal'vertices world coordinates NW, NE, SE, SW
                 
@@ -1515,6 +1563,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             "{ " + str( int (w[1].x ) ) + ", " + str( int (w[1].y ) ) + ", " + str( int (w[1].z ) ) + ", 0 }\n" +
 
                       "\t},\n" )
+
+            f.write( after )
 
                 # UNUSED : Screen coords
                       
@@ -1733,7 +1783,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     # ~ print(0)
                     PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable) ] }
-            
             
             # Find surrounding planes
             
