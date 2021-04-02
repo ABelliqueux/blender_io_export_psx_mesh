@@ -1412,46 +1412,57 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                             # Find out if we're left or right of portal
                             
+                            # Get vertices world coordinates
+                            
                             v0 = hitObject.matrix_world * hitObject.data.vertices[0].co
+                            
                             v1 = hitObject.matrix_world * hitObject.data.vertices[1].co
+                            
+                            # Check side : 
+                            #               'back' : portal in on the right of the cam, cam is on left of portal
+                            #               'front' : portal in on the left of the cam, cam is on right of portal 
                             
                             side = checkLine(v0.x, v0.y, v1.x, v1.y , camera.location.x, camera.location.y, camera.location.x, camera.location.y )
                             
                             if side == 'front':
                                 
+                                # we're on the right of the portal, origin.x must be > hitLocation.x 
+                                
                                 offset = [ 1.001, 0.999, 0.999 ]
                             
                             else :
                                 
-                                offset = [ 0.999, 1.001, 1.001 ]
+                                # we're on the left of the portal, origin.x must be < hitLocation.x
                                 
+                                offset = [ 0.999, 1.001, 1.001 ]
+                            
+                            # Add offset to hitLocation, so that the new ray won't hit the same portal
+                            
                             origin = Vector( ( hitLocation.x * offset[0], hitLocation.y * offset[1], hitLocation.z * offset[2]  ) )
                             
-                            print(hitObject.name + " is a portal at " + str( hitLocation ) + " N : " + str(normal) + " - " + side + "Or : " + str(origin) )
+                            # ~ print(hitObject.name + " is a portal at " + str( hitLocation ) + " N : " + str(normal) + " - " + side + "Or : " + str(origin) )
                         
                             result, hitLocationPort, normal, index, hitObjectPort, matrix = scene.ray_cast( origin , dirToTarget )
                             
-                            print( camera.name + " : recasting from " + str( origin ) + " to " + target.name )
+                            # ~ print( camera.name + " : recasting from " + str( origin ) + " to " + target.name )
                             
                             if hitObjectPort is not None:
                                 
                                 if hitObjectPort in rayTargets:
 
-                                    print(hitObjectPort.name)
+                                    # ~ print(hitObjectPort.name)
 
                                     visibleTarget.append(target)
+                        
+                        # If hitObject is not a portal, just add it
                         
                         elif hitObject in rayTargets:
                                 
                             visibleTarget.append(target)
                         
-            
-            print("\n")
-            
             if bpy.data.objects[ actorPtr ] not in visibleTarget:
                 
                 visibleTarget.append( bpy.data.objects[ actorPtr ] )
-
             
             prefix = CleanName(camera.name)
             
