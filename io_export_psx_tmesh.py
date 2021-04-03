@@ -896,20 +896,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     f.write("\n")
                 
                 f.write("};\n\n")
-     
-                # UNUSED 
-                # Write UVs vectors if a texture exists
                 
-                # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
-                # bpy.context.active_object.data.uv_textures.active.data[0].image.name
-                # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath
-                # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath_from_user()
-                #
-                # get image size x, y
-                # bpy.data.meshes[0].uv_textures[0].data[0].image.size[0] # x
-                # bpy.data.meshes[0].uv_textures[0].data[0].image.size[1] # y
+                # Write UV textures coordinates
                 
-                    
                 if len(m.uv_textures) != None:
      
                     for t in range(len(m.uv_textures)):
