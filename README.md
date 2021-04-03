@@ -38,6 +38,7 @@ Real-time 3D / 8bpp background / 4bpp background
 ## Planned
 
   * Fix and improve all the things !
+  * VRam auto layout for TIMs
   * Wall collisions
 
 Specifically, it generates a C file containing for each mesh in the scene:
