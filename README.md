@@ -5,10 +5,10 @@
 Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
 
 ![3d scene](gif/3d.gif)
-![3d scene](gif/precalc.gif)
-![3d scene](gif/push.gif)
-![3d scene](gif/sprite.gif)
-![3d scene](gif/vertexanim.gif)
+![pre-rendered BGs](gif/precalc.gif)
+![Push things](gif/push.gif)
+![Sprite](gif/sprite.gif)
+![Vertex animation](gif/vertexanim.gif)
 
 ## Features
 
@@ -22,6 +22,9 @@ Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a sc
   * Export vertex animations
   * Export up to 3 light sources
   * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
+
+![comparison](gif/rt-8b-4b.gif)
+Real-time 3D / 8bpp background / 4bpp background
   
 ### "Engine"
 
