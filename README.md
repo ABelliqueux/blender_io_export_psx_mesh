@@ -23,7 +23,7 @@ Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a sc
   * Export up to 3 light sources
   * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
 
-![comparison](gif/rt-8b-4b.gif)
+![comparison](gif/rt-8b-4b.gif)  
 Real-time 3D / 8bpp background / 4bpp background
   
 ### "Engine"
@@ -33,6 +33,7 @@ Real-time 3D / 8bpp background / 4bpp background
   * Orbital camera mode
   * Basic Spatial partitioning
   * Portal based camera angle switch
+  * 3D sprite
 
 ## Planned
 
