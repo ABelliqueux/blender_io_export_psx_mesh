@@ -106,6 +106,10 @@ typedef struct {
 
 Just `git clone` this repo in the addons folder of blender 2.79 :
 
+You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.
+
+Windows executables are provided for convenience.
+
 On Linux, that's :
 
 `~/.config/blender/2.79/scripts/addons`
@@ -150,3 +154,5 @@ PSX code based on [example](http://psx.arthus.net/code/primdraw.7z) by [Lameguy6
 pngquant : [https://github.com/kornelski/pngquant](https://github.com/kornelski/pngquant)
 
 img2tim : [https://github.com/Lameguy64/img2tim](https://github.com/Lameguy64/img2tim)
+
+Freeimage : [https://freeimage.sourceforge.io/](https://freeimage.sourceforge.io/)
