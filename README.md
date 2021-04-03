@@ -1,10 +1,40 @@
 ![Pic or it didn't happen](blender-psx.jpg)
 
-# blender_io_export_psx_tmesh
+# Blender PSX Level export 
 
 Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
 
-![3d scene](scene.gif)
+![3d scene](gif/3d.gif)
+![3d scene](gif/precalc.gif)
+![3d scene](gif/push.gif)
+![3d scene](gif/sprite.gif)
+![3d scene](gif/vertexanim.gif)
+
+## Features
+
+**Be warned this is WIP** !
+
+### Plugin
+
+  * Export UV textured models
+  * Export vertex painted models
+  * Export camera positions for in game use
+  * Export vertex animations
+  * Export up to 3 light sources
+  * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
+  
+### "Engine"
+
+  * Very basic physics / collision detection
+  * Constrained camera trajectory
+  * Orbital camera mode
+  * Basic Spatial partitioning
+  * Portal based camera angle switch
+
+## Planned
+
+  * Fix and improve all the things !
+  * Wall collisions
 
 Specifically, it generates a C file containing for each mesh in the scene:
 
@@ -28,16 +58,28 @@ A few usefull stuff for manipulating the mesh :
   For easy access to those, a MESH struct is defined as :
   
 ```c
-typedef struct {  
+typedef struct MESH {  
 	TMESH   *    tmesh;
-	int     *    index;
+	PRIM    *    index;
 	TIM_IMAGE *  tim;  
-	u_long  *    tim_data;
+	unsigned long * tim_data;
 	MATRIX  *    mat;
 	VECTOR  *    pos;
 	SVECTOR *    rot;
+	short   *    isRigidBody;
+	short   *    isStaticBody;
 	short   *    isPrism;
+	short   *    isAnim;
+	short   *    isActor;
+	short   *    isLevel;
+	short   *    isBG;
+	short   *    isSprite;
 	long    *    p;
+	long    *    OTz;
+	BODY    *    body;
+	VANIM   *    anim;
+	struct NODE   *    node;
+	VECTOR       pos2D;
 	} MESH;
 
 ```
@@ -58,7 +100,7 @@ typedef struct {
 
 # Install the plugin
 
-Put the `io_export_psx_tmesh.py` file in the addons folder of blender 2.79 :
+Just `git clone` this repo in the addons folder of blender 2.79 :
 
 On Linux, that's :
 
@@ -100,3 +142,7 @@ You can use [img2tim](https://github.com/Lameguy64/img2tim) to convert your blen
 Based on the [code](https://pastebin.com/suU9DigB) provided by TheDukeOfZill, 04-2014, on http://www.psxdev.net/forum/viewtopic.php?f=64&t=537#p4088
 
 PSX code based on [example](http://psx.arthus.net/code/primdraw.7z) by [Lameguy64](https://github.com/Lameguy64)
+
+pngquant : [https://github.com/kornelski/pngquant](https://github.com/kornelski/pngquant)
+
+img2tim : [https://github.com/Lameguy64/img2tim](https://github.com/Lameguy64/img2tim)
