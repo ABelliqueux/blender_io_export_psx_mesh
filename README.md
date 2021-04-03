@@ -139,8 +139,8 @@ The provided `Makefile`  uses the [Nugget+PsyQ setup](https://github.com/ABelliq
 
   1. Clone this repo in `(...)/pcsx-redux/src/mips/`
   2. Enter the `blender_io_export_psx_mesh` folder
-  3. Install the plugin in blender, then open `cubetex.blend`
-  4. Export as 'cube.c'
+  3. Install the plugin in blender, then open `level.blend`
+  4. Export as 'level.c'
   5. Type `Make`
 
 You can use [img2tim](https://github.com/Lameguy64/img2tim) to convert your blender texture in a tim file.
