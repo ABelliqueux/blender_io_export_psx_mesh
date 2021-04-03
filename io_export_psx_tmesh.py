@@ -4,7 +4,7 @@ bl_info = {
     "name":         "PSX TMesh exporter",
     "author":       "Schnappy, TheDukeOfZill",
     "blender":      (2,7,9),
-    "version":      (0,0,3),
+    "version":      (0,0,4),
     "location":     "File > Import-Export",
     "description":  "Export psx data format",
     "category":     "Import-Export"
@@ -38,8 +38,6 @@ from bpy_extras.io_utils import (ExportHelper,
 
 from bpy_extras.object_utils import world_to_camera_view
  
-from PIL import Image
-
 class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
     bl_idname       = "export_psx.c";
@@ -89,11 +87,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # ~ default=False,    
     # ~ )
     
-    exp_useIM = BoolProperty(
+    exp_useIMforTIM = BoolProperty(
     
         name = "Use ImageMagick",
     
         description = "Use Image Magick's convert tool to convert PNGs to 8/4bpp",
+    
+        default = False
+    )
+    
+    exp_TIMbpp = BoolProperty(
+    
+        name = "Use 4bpp TIMs",
+    
+        description = "Converts rendered backgrounds to 4bpp TIMs instead of the default 8bpp",
     
         default = False
     )
@@ -109,6 +116,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             me = obj.data
             
             # Get a BMesh representation
+            
             bm = bmesh.new()
             
             bm.from_mesh(me)
@@ -116,6 +124,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method=0, ngon_method=0)
             
             # Finish up, write the bmesh back to the mesh
+            
             bm.to_mesh(me)
             
             bm.free()
@@ -133,6 +142,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             return name
 
         def isInFrame(scene, cam, target):
+            
+            # Checks if an object is in view frame
             
             position = world_to_camera_view(scene, cam, target.location)
             
@@ -230,7 +241,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
             val1 = ( objX1 - lineX1 ) * ( lineY2-lineY1 ) - ( objY1 - lineY1 ) * ( lineX2 - lineX1 )
             
-            # rounding to avoid false positives
+            # Rounding to avoid false positives
             
             val1 = round(val1, 4)
             
@@ -273,6 +284,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         def objVertLtoW(target):
             
+            # Converts an object's vertices coordinates from local to global
+            
             worldPos = []
             
             mw = target.matrix_world
@@ -286,6 +299,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             return worldPos
 
         def objVertWtoS(scene, cam, target, toScale = 1):
+            
+            # Converts an object's vertices coordinates from local to screen coordinates
 
             screenPos = []
 
@@ -326,6 +341,58 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     vector.z = int( vector.z )
                                 
             return screenPos
+        
+        def convertBGtoTIM( filePathWithExt, colors = 256, bpp = 8):
+            
+            # By default, converts a RGB to 8bpp, 256 colors indexed PNG, then to a 8bpp TIM image
+            
+            filePathWithoutExt = filePathWithExt[ : filePathWithExt.rfind('.') ]
+            
+            # For windows users, add '.exe' to the command
+            
+            exe = ""
+            
+            if os.name == 'nt':
+                
+                exe = ".exe"
+            
+            # 8bpp TIM needs < 256 colors
+            
+            if bpp == 8:
+                
+                # Clamp number of colors to 256
+                
+                colors = min( 256, colors )
+            
+            elif bpp == 4:
+            
+            # 4bpp TIM needs < 16 colors
+            
+                # Clamp number of colors to 16
+                
+                colors = min( 16, colors )
+            
+            # Quantization of colors with pngquant ( https://pngquant.org/ )
+            
+            subprocess.call( [ "pngquant" + exe, str( colors ), filePathWithExt, "-o", filePathWithExt, "--force" ] )
+
+            # Image magick's convert can be used alternatively ( https://imagemagick.org/ )
+
+            if self.exp_useIMforTIM :
+
+                # ImageMagick alternative
+                
+                subprocess.call( [ "convert" + exe, filePathWithExt, "-colors", str( colors ), filePathWithExt ] )
+            
+            # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
+            
+            subprocess.call( [ "img2tim" + exe, "-t", "-bpp", str( bpp ), "-org", "320", "0", "-plt" , "0", "484","-o", filePathWithoutExt + ".tim", filePathWithExt ] )
+        
+        TIMbpp = 8
+        
+        if self.exp_TIMbpp:
+            
+            TIMbpp = 4
         
         # Leave edit mode to avoid errors
 
@@ -413,33 +480,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     bpy.data.images["Render Result"].save_render( filepath + filename + fileext )
                     
-                    # Convert to 256 colors png with pngquant ( https://pngquant.org/ )
-
-                    # For windows users
+                    # Convert PNG to TIM
                     
-                    exe = ""
-                    
-                    if os.name == 'nt':
-                        
-                        exe = ".exe"
-                    
-                    # 8bpp
-                    
-                    subprocess.call( [ "pngquant" + exe, "256", filepath + filename + fileext, "-o", filepath + filename + fileext, "--force" ] )
-
-                    # 4bpp
-
-                    # ~ subprocess.call( [ "pngquant" + exe, "16", filepath + filename + fileext, "-o", filepath + filename + fileext, "--force" ] )
-
-                    if self.exp_useIM:
-
-                        # ImageMagick alternative
-                        
-                        subprocess.call( [ "convert" + exe, filepath + filename + fileext, "-colors", "256", filepath + filename + fileext ] )
-                    
-                    # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
-                    
-                    subprocess.call( [ "img2tim" + exe, "-t", "-bpp", "8", "-org", "320", "0", "-plt" , "0", "481","-o", filepath + filename + ".tim", filepath + filename + fileext ] )
+                    convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp )
                     
                     # Add camera object to camAngles
                     
@@ -775,9 +818,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Write LC matrix
 
             f.write(
+            
                 "\t" + LCM[0] + "," + LCM[3] + "," + LCM[6] + ",\n" +
+            
                 "\t" + LCM[1] + "," + LCM[4] + "," + LCM[7] + ",\n" +
+            
                 "\t" + LCM[2] + "," + LCM[5] + "," + LCM[8] + "\n" )
+            
             f.write("\t};\n\n")
     
     ## Meshes 
@@ -850,6 +897,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 f.write("};\n\n")
      
+                # UNUSED 
                 # Write UVs vectors if a texture exists
                 
                 # get name of texture image https://docs.blender.org/api/2.79b/bpy.types.Image.html#bpy.types.Image
@@ -858,8 +906,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # bpy.context.active_object.data.uv_textures.active.data[0].image.filepath_from_user()
                 #
                 # get image size x, y
-                # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[0]) # x
-                # print(bpy.data.meshes[0].uv_textures[0].data[0].image.size[1]) # y
+                # bpy.data.meshes[0].uv_textures[0].data[0].image.size[0] # x
+                # bpy.data.meshes[0].uv_textures[0].data[0].image.size[1] # y
                 
                     
                 if len(m.uv_textures) != None:
@@ -886,10 +934,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
      
                                 uy = u.y * tex_height
      
-                                # ~ if self.exp_Precalc and m.get('isBG'):
-                                    # ~ f.write("\t255, 255, 0, 0") # Clamp values to 0-255 to avoid tpage overflow
-                                # ~ else:
-     
                                 f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
      
                                 if i != len(uv_layer) - 1:
@@ -901,6 +945,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             f.write("};\n\n")
                             
                             # Save UV texture to a file in ./TIM
+                            
                             # It will have to be converted to a tim file
 
                             if texture_image.filepath == '':
@@ -1075,13 +1120,21 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         if i == frame_start :
                         
                             f.write("VANIM model"+cleanName+"_anim = {\n" +
+                            
                                     "\t" + str(nFrame) + ",\n" +
+                            
                                     "\t" + str(len(nm.vertices)) + ",\n" + 
+                            
                                     "\t0,\n" + 
+                            
                                     "\t0,\n" + 
+                            
                                     "\t1,\n" + 
+                            
                                     "\t" + str(chkProp['lerp']) + ",\n" + 
+                            
                                     "\t{\n"
+                            
                                     )
                         
                         for v in range(len(nm.vertices)):
@@ -1119,29 +1172,53 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # Write object matrix, rot and pos vectors
                 
                 f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
+                       
                         "VECTOR model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
+                       
                         "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
+                       
                         "short model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
+                       
                         "short model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
+                       
                         "long model"+cleanName+"_p = 0;\n" +
+                       
                         "long model"+cleanName+"_OTz = 0;\n" +
+                       
                         "BODY model"+cleanName+"_body = {\n" +
+                       
                         "\t{0, 0, 0, 0},\n" +
+                       
                         "\t" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0,\n" +
+                       
                         "\t"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0,\n" +
+                       
                         "\t" + str(int(chkProp['mass'])) + ",\n" +
+                       
                         "\tONE/" + str(int(chkProp['mass'])) + ",\n" +
+                       
                         # write min and max values of AABBs on each axis
+                       
                         "\t" + str(round(min(Xvals) * scale)) + "," + str(round(min(Zvals) * scale)) + "," + str(round(min(Yvals) * scale)) + ", 0,\n" +
+                       
                         "\t" + str(round(max(Xvals) * scale)) + "," + str(round(max(Zvals) * scale)) + "," + str(round(max(Yvals) * scale)) + ", 0,\n" +
+                       
                         "\t" + str(int(chkProp['restitution'])) + ",\n" + 
+                       
                         # ~ "\tNULL\n" + 
+                       
                         "\t};\n\n")
      
                 # Write TMESH struct
@@ -1198,6 +1275,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                             else:
                                 
+                                # Convert PNG to TIM
+                    
+                                # If filename contains a dot, remove extension
+                    
+                                if tex_name.find('.') != -1:
+                                    
+                                    tex_name = tex_name[:tex_name.rfind('.')]
+
+                                # TODO : Add a way to arrange TIM's VM layout to avoid overlapping
+                                
+                                # ~ convertPNGtoTIM( folder + os.sep + "TIM" + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower() , bpp = TIMbpp )
+                                
+                                # Write corresponding TIM declaration
+                                
                                 f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
 
                                 f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
@@ -1244,18 +1335,31 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             "\t0,\n")     
                     
                 f.write("\t&model"+cleanName+"_matrix,\n" +
+                     
                         "\t&model"+cleanName+"_pos,\n" +
+                     
                         "\t&model"+cleanName+"_rot,\n" +
+                     
                         "\t&model"+cleanName+"_isRigidBody,\n" +
+                     
                         "\t&model"+cleanName+"_isStaticBody,\n" +
+                     
                         "\t&model"+cleanName+"_isPrism,\n" +
+                     
                         "\t&model"+cleanName+"_isAnim,\n" +
+                     
                         "\t&model"+cleanName+"_isActor,\n" +
+                     
                         "\t&model"+cleanName+"_isLevel,\n" +
+                     
                         "\t&model"+cleanName+"_isBG,\n" +
+                     
                         "\t&model"+cleanName+"_isSprite,\n" +
+                     
                         "\t&model"+cleanName+"_p,\n" +
+                     
                         "\t&model"+cleanName+"_OTz,\n" +
+                     
                         "\t&model"+cleanName+"_body,\n")
                         
                 if m.get("isAnim") is not None and m["isAnim"] != 0:
@@ -1352,12 +1456,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             
                             if hitObject == portal:
                                 
-                                # ~ print(str(camera) + str(hitObject))
-                                
                                 visiblePortal.append(hitObject)
                                 
-            # ~ print(str(camera) + ":" + str(visiblePortal))
-            
             # If more than one portal is visible, only keep the two closest ones
             
             if len( visiblePortal ) > 2:
@@ -1396,8 +1496,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 visiblePortal.reverse()
                 
-                # ~ print( str( camera ) + " : " + str( visiblePortal ) )
-                
             # List of target found visible
             
             visibleTarget = []
@@ -1406,7 +1504,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Chech object is in view frame
                 
-                if isInFrame(scene, camera, target):# and not target.data.get('isPortal') :
+                if isInFrame(scene, camera, target):
                     
                     # Get normalized direction vector between camera and object
                     
@@ -1458,17 +1556,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             
                             origin = Vector( ( hitLocation.x * offset[0], hitLocation.y * offset[1], hitLocation.z * offset[2]  ) )
                             
-                            # ~ print(hitObject.name + " is a portal at " + str( hitLocation ) + " N : " + str(normal) + " - " + side + "Or : " + str(origin) )
-                        
                             result, hitLocationPort, normal, index, hitObjectPort, matrix = scene.ray_cast( origin , dirToTarget )
-                            
-                            # ~ print( camera.name + " : recasting from " + str( origin ) + " to " + target.name )
                             
                             if hitObjectPort is not None:
                                 
                                 if hitObjectPort in rayTargets:
-
-                                    # ~ print(hitObjectPort.name)
 
                                     visibleTarget.append(target)
                         
@@ -1521,18 +1613,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 if side == "front":
                     
-                    # ~ print(str(visiblePortal[0]) + ' : fw')
-
                     before = "\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n"
 
                 # If back == left of screen : bw
                 
                 else :
                     
-                    # ~ print(str(visiblePortal[0]) + " : bw")
-                
                     after = "\t{\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 },\n\t\t{ 0, 0, 0, 0 }\n\t},\n"
-            
             
             prefix = CleanName(camera.name)
             
@@ -1799,7 +1886,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         PlanesRigidBodies[p]['rigidbodies'].append(CleanName(moveable))
                 else:
                     
-                    # ~ print(0)
                     PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable) ] }
             
             # Find surrounding planes
