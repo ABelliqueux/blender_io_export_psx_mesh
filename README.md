@@ -111,6 +111,8 @@ You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://gith
 
 Windows executables are provided for convenience.
 
+For users with Imagemagick installed, there is an option to use that instead of pngquant.
+
 On Linux, that's :
 
 `~/.config/blender/2.79/scripts/addons`

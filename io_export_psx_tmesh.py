@@ -20,7 +20,7 @@ import unicodedata
 
 import subprocess
 
-from math import radians, degrees, floor, cos, sin, sqrt
+from math import radians, degrees, floor, cos, sin, sqrt, ceil
 
 from mathutils import Vector
 
@@ -91,7 +91,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
         name = "Use ImageMagick",
     
-        description = "Use Image Magick's convert tool to convert PNGs to 8/4bpp",
+        description = "Use installed Image Magick's convert tool to convert PNGs to 8/4bpp",
     
         default = False
     )
@@ -107,6 +107,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
     
     def execute(self, context):
+        
+    ### Globals declaration
+    
+        global nextTpage, freeTpage
+        
+        global nextClutSlot, freeClutSlot
+        
+        global tpageY
+        
+        global TIMbpp
+        
+    ### Functions
 
         def triangulate_object(obj): 
             
@@ -342,7 +354,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 
             return screenPos
         
-        def convertBGtoTIM( filePathWithExt, colors = 256, bpp = 8):
+        def convertBGtoTIM( filePathWithExt, colors = 256, bpp = 8, timX = 640, timY = 0, clutX = 0, clutY = 480, transparency = 'alpha'):
             
             # By default, converts a RGB to 8bpp, 256 colors indexed PNG, then to a 8bpp TIM image
             
@@ -372,6 +384,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 colors = min( 16, colors )
             
+            if transparency == "alpha":
+                
+                transpMethod = "-usealpha"
+            
+            elif transparency == "black":
+            
+                transpMethod = "-b"
+            
+            elif transparency == "nonblack":
+            
+                transpMethod = "-t"
+                
             # Quantization of colors with pngquant ( https://pngquant.org/ )
             
             subprocess.call( [ "pngquant" + exe, str( colors ), filePathWithExt, "-o", filePathWithExt, "--force" ] )
@@ -386,13 +410,170 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
             
-            subprocess.call( [ "img2tim" + exe, "-t", "-bpp", str( bpp ), "-org", "320", "0", "-plt" , "0", "484","-o", filePathWithoutExt + ".tim", filePathWithExt ] )
+            subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", filePathWithoutExt + ".tim", filePathWithExt ] )
+
+        def VramIsFull( size ):
+            
+            # Returns True if not enough space in Vram for image
+            
+            # Transpose bpp to bitshift value
+
+            global nextTpage, freeTpage
+            
+            global nextClutSlot, freeClutSlot
+            
+            global tpageY
+
+            if TIMbpp == 8:
+                
+                shift = 1
+            
+            elif TIMbpp == 4:
+                
+                shift = 2
+            
+            else:
+                
+                shift = 0
+
+            # Get image width in vram
+
+            if not size:
+
+                imageWidth = size[0] >> shift
+            
+            else:
+                
+                imageWidth = size >> shift
+                
+            # Divide by cell width ( 64 pixels )
+            
+            imageWidthInTPage = ceil( imageWidth / 64 ) 
+            
+            if ( tpageY == 0 and
+                
+                nextTpage + ( imageWidthInTPage * 64 ) < 1024 and 
+               
+                freeTpage - imageWidthInTPage > 0
+               
+               ) :
+                   
+                return False
+                
+            
+            elif ( tpageY == 256 and
+                
+                nextTpage + ( imageWidthInTPage * 64 ) < 960 and 
+               
+                freeTpage - imageWidthInTPage > 1
+               
+               ) :
+                   
+                return False
+            
+            else:
+                
+                return True
+
+        def setNextTimPos( image ):
+            
+            # Sets nextTpage, freeTpage, tpageY, nextClutSlot, freeClutSlot to next free space in Vram
+            
+            
+            # Transpose bpp to bitshift value
+
+            global nextTpage, freeTpage
+            
+            global nextClutSlot, freeClutSlot
+            
+            global tpageY
+
+            if TIMbpp == 8:
+                
+                shift = 1
+            
+            elif TIMbpp == 4:
+                
+                shift = 2
+            
+            else:
+                
+                shift = 0
+
+            # Get image width in vram
+
+            imageWidth = image.size[0] >> shift
+            
+            # Divide by cell width ( 64 pixels )
+            
+            imageWidthInTPage = ceil( imageWidth / 64 ) 
+            
+            if ( tpageY == 0 and
+                
+                nextTpage + ( imageWidthInTPage * 64 ) < 1024 and 
+               
+                freeTpage - imageWidthInTPage > 0
+               
+               ) :
+                   
+                nextTpage += imageWidthInTPage * 64
+            
+                freeTpage -= imageWidthInTPage
+                
+                nextClutSlot += 1
+            
+                freeClutSlot -= 1
+                
+            
+            elif ( tpageY == 256 and
+                
+                nextTpage + ( imageWidthInTPage * 64 ) < 960 and 
+               
+                freeTpage - imageWidthInTPage > 1
+               
+               ) :
+                   
+                nextTpage += imageWidthInTPage * 64
+            
+                freeTpage -= imageWidthInTPage
+                
+                nextClutSlot += 1
+            
+                freeClutSlot -= 1
+            
+            else:
+                
+                tpageY = 256
+                
+                nextTpage = 320
+                
+                nextClutSlot += 1
+            
+                freeClutSlot -= 1
+        
+    ### VRam Layout
+        
+        nextTpage = 320
+        
+        nextClutSlot = 480
+        
+        freeTpage = 21
+        
+        freeClutSlot = 32
+        
+        tpageY    = 0
+        
+        # Set TIMs default bpp value
         
         TIMbpp = 8
+        
+        TIMshift = 1
         
         if self.exp_TIMbpp:
             
             TIMbpp = 4
+        
+            TIMshift = 2
         
         # Leave edit mode to avoid errors
 
@@ -434,6 +615,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         if self.exp_Precalc:
 
+            # Set rendering resolution
+                    
+            bpy.context.scene.render.resolution_x = 320
+            
+            bpy.context.scene.render.resolution_y = 240
+
+            # Get BGs TIM size depending on mode
+            
+            timSize = bpy.context.scene.render.resolution_x >> TIMshift
+            
+            timSizeInCell = ceil( timSize / 64 )
+            
             # Create folder if it doesn't exist
             
             os.makedirs(dirpath, exist_ok = 1)
@@ -447,6 +640,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # ~ bpy.context.scene.render.image_settings.compression = 0
             
             bpy.context.scene.render.image_settings.color_depth = '8'
+            
+            bpy.context.scene.render.image_settings.color_mode = 'RGB'
             
             # Get active cam
             
@@ -482,13 +677,36 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     # Convert PNG to TIM
                     
-                    convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp )
+                    if not VramIsFull( bpy.context.scene.render.resolution_x ):
                     
+                        convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                    
+                    else:
+                
+                        tpageY = 256
+                
+                        nextTpage = 320
+                        
+                        if not VramIsFull( bpy.context.scene.render.resolution_x ):
+                        
+                            convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                        
                     # Add camera object to camAngles
                     
                     camAngles.append(o)
         
+            # Notify layout change to vars
             
+            nextTpage += timSizeInCell * 64
+            
+            freeTpage -= timSizeInCell
+            
+            nextClutSlot += 1
+            
+            freeClutSlot -= 1
+            
+            print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
+                
 ### Start writing output file
         
         # Open file
@@ -640,21 +858,21 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         # Define first mesh. Will be used as default if no properties are found in meshes
         
-        first_mesh = CleanName(bpy.data.meshes[0].name)
+        first_mesh = CleanName( bpy.data.meshes[ 0 ].name )
 
         # Set camera position and rotation in the scene
         
-        for o in range(len(bpy.data.objects)):
+        for o in range( len( bpy.data.objects ) ):
             
             # Add objects of type MESH with a Rigidbody or StaticBody flag set to a list
             
-            if bpy.data.objects[o].type == 'MESH':
+            if bpy.data.objects[ o ].type == 'MESH':
                 
                 if ( 
                     
-                    bpy.data.objects[o].data.get('isRigidBody') or 
+                    bpy.data.objects[ o ].data.get('isRigidBody') or 
                     
-                    bpy.data.objects[o].data.get('isStaticBody')
+                    bpy.data.objects[ o ].data.get('isStaticBody')
                     
                     #or bpy.data.objects[o].data.get('isPortal')
                     
@@ -672,19 +890,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
             if bpy.data.objects[o].type == 'CAMERA':
     
-                f.write("CAMPOS camPos_" + CleanName(bpy.data.objects[o].name) + " = {\n" +
+                f.write("CAMPOS camPos_" + CleanName( bpy.data.objects[ o ].name ) + " = {\n" +
     
-                "\t{" + str(round(-bpy.data.objects[o].location.x * scale)) + "," + str(round(bpy.data.objects[o].location.z * scale)) + "," +str(round(-bpy.data.objects[o].location.y * scale)) + "},\n" +
+                            "\t{ " + str( round( -bpy.data.objects[o].location.x * scale ) ) +
+                              
+                               "," + str( round(  bpy.data.objects[o].location.z * scale ) ) + 
+                              
+                               "," + str( round( -bpy.data.objects[o].location.y * scale ) ) + " },\n" +
     
-                "\t{" + str(round(-(degrees(bpy.data.objects[o].rotation_euler.x)-90)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[o].rotation_euler.z)/360 * 4096)) + "," + str(round(-(degrees(bpy.data.objects[o].rotation_euler.y))/360 * 4096)) + "}\n" +
+                            "\t{ " + str( round( -( degrees( bpy.data.objects[ o ].rotation_euler.x ) -90 ) / 360 * 4096 ) ) +
+                            
+                               "," + str( round(    degrees( bpy.data.objects[ o ].rotation_euler.z )       / 360 * 4096 ) ) + 
+                               
+                               "," + str( round( -( degrees( bpy.data.objects[ o ].rotation_euler.y )     ) / 360 * 4096 ) ) + 
+                               
+                               " }\n" +
     
-                "};\n\n")
+                        "};\n\n")
                 
         # Find camera path points and append them to camPathPoints[]
         
             if bpy.data.objects[o].type == 'CAMERA' :
     
-                if bpy.data.objects[o].name.startswith("camPath") and not bpy.data.objects[o].data.get('isDefault'):
+                if ( bpy.data.objects[ o ].name.startswith( "camPath" ) and not
+                
+                     bpy.data.objects[ o ].data.get( 'isDefault' )
+                   
+                   ) :
     
                     camPathPoints.append(bpy.data.objects[o].name)
 
@@ -696,13 +928,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # ~ camPathPoints = list(reversed(camPathPoints))
             
-            for p in range(len(camPathPoints)):
+            for point in range(len(camPathPoints)):
     
-                if p == 0:
+                if point == 0:
     
                     f.write("CAMPATH camPath = {\n" +
     
-                            "\t" + str(len(camPathPoints)) + ",\n" +
+                            "\t" + str( len( camPathPoints ) ) + ",\n" +
     
                             "\t0,\n" +
     
@@ -710,9 +942,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                             "\t{\n")
     
-                f.write("\t\t{" + str(round(-bpy.data.objects[camPathPoints[p]].location.x * scale)) + "," + str(round(bpy.data.objects[camPathPoints[p]].location.z * scale)) + "," +str(round(-bpy.data.objects[camPathPoints[p]].location.y * scale)) + "}")
+                f.write( "\t\t{ " + str( round( -bpy.data.objects[ camPathPoints[ point ] ].location.x * scale ) ) +
+                
+                              "," + str( round(  bpy.data.objects[ camPathPoints[ point ] ].location.z * scale ) ) + 
+                            
+                              "," + str( round( -bpy.data.objects[ camPathPoints[ point ] ].location.y * scale ) ) + 
+                            
+                             " }" )
     
-                if p != len(camPathPoints) - 1:
+                if point != len( camPathPoints ) - 1:
     
                     f.write(",\n")  
     
@@ -739,7 +977,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # LLM : Local Light Matrix   
           
-        if len(bpy.data.lamps) is not None:
+        if len( bpy.data.lamps ) is not None:
             
             # ~ f.write( "static MATRIX lgtmat = {\n" +
                      # ~ "\t 4096, 4096, 4096,\n" +
@@ -749,7 +987,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      
             cnt = 0
        
-            pad = 3 - len(bpy.data.lamps)
+            pad = 3 - len( bpy.data.lamps )
             
             f.write( "static MATRIX lgtmat = {\n")
             
@@ -757,23 +995,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                 # Lightsource energy
                 
-                energy   = int(bpy.data.lamps[l].energy * 4096)
+                energy   = int( bpy.data.lamps[ l ].energy * 4096 )
                 
                 # Get lightsource's world orientation
                 
-                lightdir = bpy.data.objects[bpy.data.lamps[l].name].matrix_world * Vector((0,0,-1,0))
+                lightdir = bpy.data.objects[ bpy.data.lamps[ l ].name ].matrix_world * Vector( ( 0, 0, -1, 0 ) )
                 
                 f.write( 
             
-                    "\t" + str(int(lightdir.x * energy)) + "," + 
+                    "\t" + str( int(  lightdir.x * energy ) ) + "," + 
             
-                    "\t" + str(int(-lightdir.z * energy)) + "," +
+                    "\t" + str( int( -lightdir.z * energy ) ) + "," +
             
-                    "\t" + str(int(lightdir.y * energy))  
+                    "\t" + str( int(  lightdir.y * energy ) )  
 
                     )
             
-                if l != len(bpy.data.lamps) - 1:
+                if l != len( bpy.data.lamps ) - 1:
 
                     f.write(",\n")
                 
@@ -803,11 +1041,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             for l in bpy.data.lamps:
         
-                LCM.append(str(int(l.color.r * 4096) if l.color.r else 0))
+                LCM.append( str( int( l.color.r * 4096 ) if l.color.r else 0 ) )
         
-                LCM.append(str(int(l.color.g * 4096) if l.color.g else 0))
+                LCM.append( str( int( l.color.g * 4096 ) if l.color.g else 0 ) )
         
-                LCM.append(str(int(l.color.b * 4096) if l.color.b else 0))
+                LCM.append( str( int( l.color.b * 4096 ) if l.color.b else 0 ) )
             
             if len(LCM) < 9:
         
@@ -819,11 +1057,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
             f.write(
             
-                "\t" + LCM[0] + "," + LCM[3] + "," + LCM[6] + ",\n" +
+                "\t" + LCM[ 0 ] + "," + LCM[ 3 ] + "," + LCM[ 6 ] + ",\n" +
             
-                "\t" + LCM[1] + "," + LCM[4] + "," + LCM[7] + ",\n" +
+                "\t" + LCM[ 1 ] + "," + LCM[ 4 ] + "," + LCM[ 7 ] + ",\n" +
             
-                "\t" + LCM[2] + "," + LCM[5] + "," + LCM[8] + "\n" )
+                "\t" + LCM[ 2 ] + "," + LCM[ 5 ] + "," + LCM[ 8 ] + "\n" )
             
             f.write("\t};\n\n")
     
@@ -855,21 +1093,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                 # Write vertices vectors
      
-                f.write("SVECTOR "+"model"+cleanName+"_mesh[] = {\n")
+                f.write( "SVECTOR " + "model" + cleanName + "_mesh[] = {\n" )
 
-                for i in range(len(m.vertices)):
+                for i in range( len( m.vertices ) ):
                     
-                    v = m.vertices[i].co
+                    v = m.vertices[ i ].co
                     
                     # Append vertex coords to lists
                     
-                    Xvals.append(v.x)
+                    Xvals.append(  v.x )
              
-                    Yvals.append(v.y)
+                    Yvals.append(  v.y )
              
-                    Zvals.append(-v.z)
+                    Zvals.append( -v.z )
                     
-                    f.write("\t{"+str(round(v.x*scale))+","+str(round(-v.z*scale)) + "," + str(round(v.y*scale)) +"}")
+                    f.write("\t{ " + str( round(  v.x * scale ) ) +
+                            
+                               "," + str( round( -v.z * scale ) ) +
+                              
+                               "," + str( round(  v.y * scale ) ) + " }" )
                     
                     if i != len(m.vertices) - 1:
              
@@ -887,7 +1129,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     poly = m.vertices[i]
                 
-                    f.write("\t"+str(round(-poly.normal.x * 4096))+","+str(round(poly.normal.z  * 4096))+","+str(round(-poly.normal.y  * 4096))+",0")
+                    f.write( "\t"+ str( round( -poly.normal.x * 4096 ) ) + 
+                             
+                             "," + str( round(  poly.normal.z * 4096 ) ) +
+                             
+                             "," + str( round( -poly.normal.y * 4096 ) ) + ", 0" )
                 
                     if i != len(m.vertices) - 1:
                 
@@ -923,7 +1169,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
      
                                 uy = u.y * tex_height
      
-                                f.write("\t"+str(max(0, min( round(ux) , 255 )))+","+str(max(0, min(round(tex_height - uy) , 255 )))+", 0, 0") # Clamp values to 0-255 to avoid tpage overflow
+                                # Clamp values to 0-255 to avoid tpage overflow
+     
+                                f.write("\t" + str( max( 0, min( round( ux ) , 255 ) ) ) + 
+                                        
+                                         "," + str( max( 0, min( round( tex_height - uy ) , 255 ) ) ) +
+                                         
+                                         ", 0, 0" ) 
      
                                 if i != len(uv_layer) - 1:
      
@@ -945,6 +1197,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                             texture_image.save()
                             
+                            
                 # Write vertex colors vectors
      
                 f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n")
@@ -957,7 +1210,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     for i in range(len(colors)):
                 
-                        f.write("\t"+str(int(colors[i].color.r*255))+","+str(int(colors[i].color.g*255))+","+str(int(colors[i].color.b*255))+", 0")
+                        f.write("\t" + str( int( colors[ i ].color.r * 255 ) ) + "," +
+                                      
+                                       str( int( colors[ i ].color.g * 255 ) ) + "," +
+                                       
+                                       str( int( colors[ i ].color.b * 255 ) ) + ", 0" )
                 
                         if i != len(colors) - 1:
                 
@@ -995,7 +1252,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     poly = m.polygons[i]
                 
-                    f.write("\t"+str(poly.vertices[0])+","+str(poly.vertices[1])+","+str(poly.vertices[2]))
+                    f.write( "\t" + str( poly.vertices[ 0 ] ) + "," + str( poly.vertices[ 1 ] ) + "," + str( poly.vertices[ 2 ] ) )
                     
                     if len(poly.vertices) > 3:
                 
@@ -1270,11 +1527,39 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                                 if tex_name.find('.') != -1:
                                     
-                                    tex_name = tex_name[:tex_name.rfind('.')]
+                                    tex_name = tex_name[ : tex_name.rfind( '.' ) ]
 
                                 # TODO : Add a way to arrange TIM's VM layout to avoid overlapping
                                 
-                                # ~ convertPNGtoTIM( folder + os.sep + "TIM" + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower() , bpp = TIMbpp )
+                                filePathWithExt = folder + os.sep + "TIM" + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower()
+                                
+                                if not VramIsFull( bpy.context.scene.render.resolution_x ):
+                    
+                                    convertBGtoTIM( filePathWithExt, bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                    
+                                    setNextTimPos( texture_image )
+                                
+                                elif VramIsFull( bpy.context.scene.render.resolution_x ) and tpageY == 0:
+                            
+                                    tpageY = 256
+                            
+                                    nextTpage = 320
+                                    
+                                    if not VramIsFull( bpy.context.scene.render.resolution_x ):
+                                
+                                        convertBGtoTIM( filePathWithExt, bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                                
+                                        setNextTimPos( texture_image )
+                                    
+                                    else:
+                                        
+                                        self.report({'ERROR'}, "Not enough space in VRam !")
+                                    
+                                else:
+                                    
+                                    self.report({'ERROR'}, "Not enough space in VRam !")
+                                
+                                print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
                                 
                                 # Write corresponding TIM declaration
                                 
@@ -1894,13 +2179,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         if checkLine(
                     
                             getSepLine(p, s[0])[0],
+                            
                             getSepLine(p, s[0])[1],
+                            
                             getSepLine(p, s[0])[2],
+                            
                             getSepLine(p, s[0])[3],
                             
                             getSepLine(op, s[1])[0],
+                            
                             getSepLine(op, s[1])[1],
+                            
                             getSepLine(op, s[1])[2],
+                            
                             getSepLine(op, s[1])[3]
                     
                              ) == 'connected' and (
@@ -1934,21 +2225,21 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             if 'siblings' in PlanesObjects[p]:
 
-                if 'S' in PlanesObjects[p]['siblings']: 
+                if 'S' in PlanesObjects[ p ][ 'siblings' ]: 
                 
-                    nSiblings += len(PlanesObjects[p]['siblings']['S'])
+                    nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'S' ] )
                 
-                if 'N' in PlanesObjects[p]['siblings']: 
+                if 'N' in PlanesObjects[ p ][ 'siblings' ]: 
                     
-                    nSiblings += len(PlanesObjects[p]['siblings']['N'])
+                    nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'N' ] )
                     
-                if 'E' in PlanesObjects[p]['siblings']: 
+                if 'E' in PlanesObjects[ p ][ 'siblings' ]: 
                     
-                    nSiblings += len(PlanesObjects[p]['siblings']['E'])
+                    nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'E' ] )
                     
-                if 'W' in PlanesObjects[p]['siblings']: 
+                if 'W' in PlanesObjects[ p ][ 'siblings' ]: 
                     
-                    nSiblings += len(PlanesObjects[p]['siblings']['W'])
+                    nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'W' ] )
                 
             f.write("SIBLINGS node" + pName + "_siblings = {\n" + 
                     "\t" + str(nSiblings) + ",\n" +
