@@ -705,7 +705,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             freeClutSlot -= 1
             
-            print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
+            # ~ print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
                 
 ### Start writing output file
         
@@ -1559,7 +1559,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                     
                                     self.report({'ERROR'}, "Not enough space in VRam !")
                                 
-                                print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
+                                # ~ print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
                                 
                                 # Write corresponding TIM declaration
                                 
@@ -2119,12 +2119,44 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # ~     ''
         # ~ }
 
+        overlappingObject = []
+
         for p in LvlPlanes:
             
             # Find objects on plane
             
             for o in LvlObjects:
                 
+                # If object is overlapping between several planes
+                
+                if isInPlane(LvlPlanes[p], LvlObjects[o]) > 1:
+                    
+                    print(o + "overlaps !")
+                    
+                    # Object not actor
+                    
+                    if o != actorPtr:
+                        
+                        # Object not in list
+                        
+                        if o not in overlappingObject:
+                        
+                            overlappingObject.append(o)
+                            
+                        else:
+                            
+                            overlappingObject.remove(o)
+                            
+                            # Add this object to the plane's list
+                    
+                            if 'objects' in PlanesObjects[p]:
+                        
+                                PlanesObjects[p]['objects'].append(o)
+                        
+                            else:
+                        
+                                PlanesObjects[p] = { 'objects' : [o] }
+                    
                 # If object is above plane
                 
                 if isInPlane(LvlPlanes[p], LvlObjects[o]) == 1:
@@ -2146,8 +2178,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     else:
                     
                         # If actor is on this plane, use it as starting node
+                        
                         levelPtr = p
+                        
                         nodePtr = p
+        
             
             # Add moveable objects in every plane
             
