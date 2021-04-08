@@ -37,7 +37,9 @@ from bpy_extras.io_utils import (ExportHelper,
                                  axis_conversion)
 
 from bpy_extras.object_utils import world_to_camera_view
- 
+
+from re import sub
+
 class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
     bl_idname       = "export_psx.c";
@@ -178,6 +180,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         def isInPlane(plane, obj):
                 
             # Checks  if 'obj' has its coordinates contained between the plane's coordinate.
+            # Obj is a dict
             # If 'obj' is contained, returns 1.
             # If 'obj' is partly contained, returns which side (S == 2, W == 4, N == 8, E == 6) it's overlapping.
             # If 'obj' is not contained in 'plane', returns 0.
@@ -912,9 +915,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             if bpy.data.objects[o].type == 'CAMERA' :
     
-                if ( bpy.data.objects[ o ].name.startswith( "camPath" ) and not
+                if ( bpy.data.objects[ o ].name.startswith( "camPath" ) 
                 
-                     bpy.data.objects[ o ].data.get( 'isDefault' )
+                     and not bpy.data.objects[ o ].data.get( 'exclude' )
                    
                    ) :
     
@@ -1573,14 +1576,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 
                                 timList.append(prefix)
 
+                f.write("NODE_DECLARATION\n")
+
                 f.write("MESH mesh"+cleanName+" = {\n")
                 
                 f.write("\t&model"+ cleanName +",\n")
                 
                 f.write("\tmodel" + cleanName + "_index,\n")
                 
-                
-
                 if len(m.uv_textures) != None:
                 
                     for t in range(len(m.uv_textures)):
@@ -1645,7 +1648,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         
                 f.write(
+                        
+                        "\t" + "subs_" + m.name + ",\n" +
+                        
                         "\t0" +
+                        
                         "\n};\n\n"
                         )
         
@@ -1692,7 +1699,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                    
                     "\t&camPos_" + CleanName(defaultCam) + ",\n" +
                    
-                    "\t0,\n 0,\n {0},\n {0},\n 0,\n 0\n" + 
+                    "\t0,\n\t 0,\n\t { 0 },\n\t { 0 },\n\t 0,\n\t 0\n" + 
                    
                     "};\n\n")
         
@@ -2009,6 +2016,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         Moveables = []
 
+        # Store starting plane for moveables
+
+        PropPlane = defaultdict(dict)
+
         # Store XY1, XY2 values
 
         Xvalues = []
@@ -2089,23 +2100,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     if o.data.get("isRigidBody"):
                         
-                        Moveables.append(o.name)
+                        Moveables.append(o)
 
         # Declare LvlPlanes nodes to avoid declaration dependency issues
             
-        # ~ f.write("NODE ")
-        
-        for k in LvlPlanes.keys():
+        # ~ for k in LvlPlanes.keys():
             
-            f.write("NODE node" + CleanName(k) + ";\n\n")
+            # ~ f.write("NODE node" + CleanName(k) + ";\n\n")
 
         # Sides of the plane to check
 
         checkSides = [ 
                        ['N','S'], 
+                       
                        ['S','N'], 
+                       
                        ['W','E'], 
+                       
                        ['E','W'] 
+                     
                      ]
 
         # Generate a dict : 
@@ -2130,8 +2143,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # If object is overlapping between several planes
                 
                 if isInPlane(LvlPlanes[p], LvlObjects[o]) > 1:
-                    
-                    print(o + "overlaps !")
                     
                     # Object not actor
                     
@@ -2188,15 +2199,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             for moveable in Moveables:
                 
+                # If moveable is not actor
+                
+                if moveable.data.get( 'isProp' ):
+                
+                    # If is in current plane, add it to the list
+                    
+                    if isInPlane( LvlPlanes[ p ], LvlObjects[ moveable.name ] ) :
+                    
+                        PropPlane[moveable] = p
+                        
                 if 'rigidbodies' in PlanesRigidBodies[p]:
         
-                    if moveable not in PlanesRigidBodies[p]['rigidbodies']:
+                    if moveable.name not in PlanesRigidBodies[p]['rigidbodies']:
                 
-                        PlanesRigidBodies[p]['rigidbodies'].append(CleanName(moveable))
+                        PlanesRigidBodies[ p ][ 'rigidbodies' ].append(CleanName( moveable.name ) )
                 else:
                     
-                    PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable) ] }
-            
+                    PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable.name) ] }
+        
             # Find surrounding planes
             
             for op in LvlPlanes:
@@ -2251,7 +2272,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             else:
                             
                                 PlanesObjects[p]['siblings'][s[0]] = [op]
-               
+            
             pName = CleanName(p)
             
             # Write SIBLINGS structure
@@ -2277,7 +2298,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'W' ] )
                 
             f.write("SIBLINGS node" + pName + "_siblings = {\n" + 
+            
                     "\t" + str(nSiblings) + ",\n" +
+            
                     "\t{\n")
             
             if 'siblings' in PlanesObjects[p]:
@@ -2302,6 +2325,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\t\t0\n")
             
             f.write("\t}\n" +
+            
                     "};\n\n")
             
             # Write CHILDREN static objects structure
@@ -2369,12 +2393,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Write NODE structure
                     
             f.write( "NODE node" + pName + " = {\n" +
+            
                      "\t&mesh" + pName + ",\n" +
+            
                      "\t&node" + pName + "_siblings,\n" +
+            
                      "\t&node" + pName + "_objects,\n" +
+            
                      "\t&node" + pName + "_rigidbodies\n" +
+            
                      "};\n\n" )
-
+        
         f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
         
         f.write("MESH * levelPtr = &mesh" + CleanName(levelPtr) + ";\n")
@@ -2391,6 +2420,51 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             bpy.context.scene.camera = bpy.data.objects[ defaultCam ]
 
+        f.close()
+        
+        
+        # Using a UGLY method here , sorry ! 
+        # We're re-opening the file we just closed to substracts some values that were not available 
+        # Fill in node in MESH structs
+
+        # Get the file content
+
+        f = open(os.path.normpath(self.filepath),'r')
+        
+        filedata = f.read()
+        
+        f.close()
+
+        # Declare LvlPlanes nodes to avoid declaration dependency issues
+        
+        # Constuct and store the new string
+
+        Node_declaration = ''
+
+        for k in LvlPlanes.keys():
+            
+            Node_declaration += "NODE node" + CleanName(k) + ";\n\n"
+        
+        # Do the substitution
+        
+        newdata = filedata.replace("NODE_DECLARATION\n", Node_declaration)
+
+        # Now substitute mesh name for corresponding plane's NODE
+
+        for moveable in PropPlane:
+
+            newdata = newdata.replace("subs_" + moveable.name, "&node" + PropPlane[moveable])
+
+        # Subsitute mesh name with 0 in the other MESH structs
+        
+        newdata = sub("(?m)^\tsubs_.*$", "\t0,", newdata )
+        
+        # Open and write file
+        
+        f = open(os.path.normpath(self.filepath),'w')
+        
+        f.write(newdata)
+        
         f.close()
         
         return {'FINISHED'};
