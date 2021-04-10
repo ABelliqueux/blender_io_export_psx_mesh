@@ -708,19 +708,41 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             freeClutSlot -= 1
             
-            # ~ print( str(freeTpage) + " : " + str(nextTpage) + " : " + str(nextClutSlot) + " : " + str(freeClutSlot) )
-                
-### Start writing output file
+### Start writing output files
+
+        # Stolen from Lameguy64 : https://github.com/Lameguy64/Blender-RSD-Plugin/blob/b3b6fd4475aed4ca38587ca83d34000f60b68a47/io_export_rsd.py#L68
+
+        filepath = self.filepath
+        
+        filepath = filepath.replace(self.filename_ext, "")	# Quick fix to get around the aforementioned 'bugfix'
+        
+        # ~ h_filepath = bpy.path.ensure_ext(filepath, '.h')
+        
+        h_filepath = folder + os.sep + 'custom_types.h'
+        
+        # ~ c_filepath = bpy.path.ensure_ext(filepath, self.filename_ext)
+        
+        c_filepath = folder + os.sep + 'level.c'
+
+### Header (.h)
         
         # Open file
         
-        f = open(os.path.normpath(self.filepath),"w+")
+        h = open(os.path.normpath(h_filepath),"w+")
         
     ## Add C structures definitions
         
+        h.write(
+            
+                "#include <sys/types.h>\n" + 
+                "#include <libgte.h>\n" + 
+                "#include <libgpu.h>\n\n" 
+        
+                )
+        
         # Partial declaration of structures to avoid inter-dependencies issues
         
-        f.write("struct BODY;\n" +
+        h.write("struct BODY;\n" +
                 "struct VANIM;\n" +
                 "struct PRIM;\n" +
                 "struct MESH;\n" +
@@ -735,7 +757,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # BODY
         
-        f.write("typedef struct BODY {\n" +
+        h.write("typedef struct BODY {\n" +
                 "\tVECTOR  gForce;\n" +
                 "\tVECTOR  position;\n" +
                 "\tSVECTOR velocity;\n" +
@@ -749,7 +771,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # VANIM
         
-        f.write("typedef struct VANIM { \n" +
+        h.write("typedef struct VANIM { \n" +
                 "\tint nframes;    // number of frames e.g   20\n" +
                 "\tint nvert;      // number of vertices e.g 21\n" +
                 "\tint cursor;     // anim cursor\n" +
@@ -762,14 +784,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
         # PRIM
         
-        f.write("typedef struct PRIM {\n" +
+        h.write("typedef struct PRIM {\n" +
                 "\tVECTOR order;\n" +
                 "\tint    code; // Same as POL3/POL4 codes : Code (F3 = 1, FT3 = 2, G3 = 3,\n// GT3 = 4) Code (F4 = 5, FT4 = 6, G4 = 7, GT4 = 8)\n" +
                 "\t} PRIM;\n\n")
         
         # MESH
         
-        f.write("typedef struct MESH {  \n"+
+        h.write("typedef struct MESH {  \n"+
                 "\tTMESH   *    tmesh;\n" +
                 "\tPRIM    *    index;\n" +
                 "\tTIM_IMAGE *  tim;  \n" + 
@@ -795,14 +817,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         #QUAD
         
-        f.write("typedef struct QUAD {\n" +
+        h.write("typedef struct QUAD {\n" +
                 "\tVECTOR       v0, v1;\n" +
                 "\tVECTOR       v2, v3;\n" +
                 "\t} QUAD;\n\n")
         
         # CAMPOS
         
-        f.write("typedef struct CAMPOS {\n" +
+        h.write("typedef struct CAMPOS {\n" +
                 "\tVECTOR  pos;\n" +
                 "\tSVECTOR rot;\n" + 
                 "\t} CAMPOS;\n\n" +
@@ -814,7 +836,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # CAMANGLE
         
-        f.write("typedef struct CAMANGLE {\n" +
+        h.write("typedef struct CAMANGLE {\n" +
                 "\tCAMPOS    * campos;\n" +
                 "\tTIM_IMAGE * BGtim;\n" +
                 "\tunsigned long * tim_data;\n" +
@@ -825,34 +847,50 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
         # CAMPATH
         
-        f.write("typedef struct CAMPATH {\n" +
+        h.write("typedef struct CAMPATH {\n" +
                 "\tshort len, cursor, pos;\n" +
                 "\tVECTOR points[];\n" +
                 "\t} CAMPATH;\n\n")
 
         # SIBLINGS
         
-        f.write("typedef struct SIBLINGS {\n" +
+        h.write("typedef struct SIBLINGS {\n" +
                 "\tint index;\n" +
                 "\tstruct NODE * list[];\n" +
                 "\t} SIBLINGS ;\n\n")
     
         # CHILDREN
 
-        f.write("typedef struct CHILDREN {\n" +
+        h.write("typedef struct CHILDREN {\n" +
                 "\tint index;\n" +
                 "\tMESH * list[];\n" + 
                 "\t} CHILDREN ;\n\n")
         
         # NODE
 
-        f.write("typedef struct NODE {\n" +
+        h.write("typedef struct NODE {\n" +
                 "\tMESH * plane;\n" +
                 "\tSIBLINGS * siblings;\n" + 
                 "\tCHILDREN * objects;\n" + 
                 "\tCHILDREN * rigidbodies;\n" + 
                 "\t} NODE;\n\n")
 
+        h.close()
+
+## Data (.C) 
+
+        f = open(os.path.normpath(c_filepath),"w+")
+
+        f.write(
+                
+                '#ifndef TYPES\n' +
+                
+                '\t#include "custom_types.h"\n' +
+                
+                '#endif\n\n'
+                
+                )
+                
     ## Camera setup
 
         # List of points defining the camera path
@@ -2429,7 +2467,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         # Get the file content
 
-        f = open(os.path.normpath(self.filepath),'r')
+        f = open(os.path.normpath(c_filepath),"r")
         
         filedata = f.read()
         
@@ -2461,7 +2499,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # Open and write file
         
-        f = open(os.path.normpath(self.filepath),'w')
+        f = open(os.path.normpath(c_filepath),"w")
         
         f.write(newdata)
         
