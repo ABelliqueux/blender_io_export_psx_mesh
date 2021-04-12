@@ -716,26 +716,47 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         filepath = filepath.replace(self.filename_ext, "")	# Quick fix to get around the aforementioned 'bugfix'
         
-        # ~ h_filepath = bpy.path.ensure_ext(filepath, '.h')
+        # We're writing a few files:
+        #  - custom_types.h contains the 'engine' 's specific struct definitions
+        #  - level.h        contains the forward declaration of the level's variables
+        #  - level.c        contains the initialization and data of those variables
         
-        h_filepath = folder + os.sep + 'custom_types.h'
+        # 'custom_types.h' goes in project's root
         
-        # ~ c_filepath = bpy.path.ensure_ext(filepath, self.filename_ext)
+        custom_types_h = folder + os.sep + 'custom_types.h'
         
-        c_filepath = folder + os.sep + 'level.c'
+        # Levels files go in ./levels/
+        
+        # If ./levels does not exist, create it
+        
+        if not os.path.exists(folder + os.sep + 'levels'):
+            
+            os.mkdir(folder + os.sep + 'levels')
+        
+        levels_folder = folder + os.sep + 'levels' + os.sep
+        
+        # TODO : dynamic filenaming
+        
+        level_h = levels_folder + 'level.h'
+        
+        level_c = levels_folder + 'level.c'
 
-### Header (.h)
+### Custom types Header (custom_types.h)
         
         # Open file
         
-        h = open(os.path.normpath(h_filepath),"w+")
+        h = open(os.path.normpath(custom_types_h),"w+")
         
     ## Add C structures definitions
         
         h.write(
             
+                "#pragma once\n" + 
+                
                 "#include <sys/types.h>\n" + 
+                
                 "#include <libgte.h>\n" + 
+                
                 "#include <libgpu.h>\n\n" 
         
                 )
@@ -877,18 +898,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         h.close()
 
-## Data (.C) 
+## Level Data (level.c)
 
-        f = open(os.path.normpath(c_filepath),"w+")
+        # Store every variable name in a list so that we can populate the level.h file later
+        
+        level_variables = []
+
+        f = open(os.path.normpath(level_c),"w+")
 
         f.write(
-                
-                '#ifndef TYPES\n' +
-                
-                '\t#include "custom_types.h"\n' +
-                
-                '#endif\n\n'
-                
+        
+                '#include "level.h"\n\n'
+                                
                 )
                 
     ## Camera setup
@@ -949,6 +970,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                         "};\n\n")
                 
+                level_variables.append( "CAMPOS camPos_" + CleanName( bpy.data.objects[ o ].name ) )
+                
         # Find camera path points and append them to camPathPoints[]
         
             if bpy.data.objects[o].type == 'CAMERA' :
@@ -982,6 +1005,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             "\t0,\n" +
     
                             "\t{\n")
+                            
+                    level_variables.append( "CAMPATH camPath" )
     
                 f.write( "\t\t{ " + str( round( -bpy.data.objects[ camPathPoints[ point ] ].location.x * scale ) ) +
                 
@@ -1009,7 +1034,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                             "\t0\n"  +
     
-                            "};\n\n")        
+                            "};\n\n" )
+                            
+            level_variables.append( "CAMPATH camPath" )
         
     ## Lighting setup 
     
@@ -1030,7 +1057,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
        
             pad = 3 - len( bpy.data.lamps )
             
-            f.write( "static MATRIX lgtmat = {\n")
+            f.write( "MATRIX lgtmat = {\n")
             
             for l in range(len(bpy.data.lamps)):
 
@@ -1073,10 +1100,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         cnt += 1
             
             f.write("\n\t};\n\n")
-        
+            
+            level_variables.append( "MATRIX lgtmat" )
+            
             # LCM : Local Color Matrix
             
-            f.write( "static MATRIX cmat = {\n")
+            f.write( "MATRIX cmat = {\n")
             
             LCM = []
         
@@ -1105,6 +1134,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\t" + LCM[ 2 ] + "," + LCM[ 5 ] + "," + LCM[ 8 ] + "\n" )
             
             f.write("\t};\n\n")
+            
+            level_variables.append( "MATRIX cmat" )
     
     ## Meshes 
     
@@ -1135,6 +1166,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # Write vertices vectors
      
                 f.write( "SVECTOR " + "model" + cleanName + "_mesh[] = {\n" )
+                
+                level_variables.append( "SVECTOR " + "model" + cleanName + "_mesh[]" )
 
                 for i in range( len( m.vertices ) ):
                     
@@ -1166,6 +1199,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
      
                 f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
                 
+                level_variables.append( "SVECTOR "+"model"+cleanName+"_normal[]" )
+                
                 for i in range(len(m.vertices)):
                 
                     poly = m.vertices[i]
@@ -1193,6 +1228,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         if m.uv_textures[t].data[0].image != None:
      
                             f.write("SVECTOR "+"model"+cleanName+"_uv[] = {\n")
+                            
+                            level_variables.append( "SVECTOR "+"model"+cleanName+"_uv[]")
      
                             texture_image = m.uv_textures[t].data[0].image
      
@@ -1242,6 +1279,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # Write vertex colors vectors
      
                 f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n")
+                
+                level_variables.append( "CVECTOR "+"model"+cleanName+"_color[]" )
                  
                 # If vertex colors exist, use them
                 
@@ -1287,7 +1326,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Write polygons index + type
                 
-                f.write("PRIM "+"model"+cleanName+"_index[] = {\n")
+                f.write( "PRIM "+"model"+cleanName+"_index[] = {\n" )
+                
+                level_variables.append( "PRIM "+"model"+cleanName+"_index[]" )
                 
                 for i in range(len(m.polygons)):
                 
@@ -1423,7 +1464,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                     "\t{\n"
                             
                                     )
-                        
+                            
+                            level_variables.append( "VANIM model"+cleanName+"_anim" )
+                            
                         for v in range(len(nm.vertices)):
                         
                             if v == 0:
@@ -1507,14 +1550,48 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         # ~ "\tNULL\n" + 
                        
                         "\t};\n\n")
-     
+                
+                level_variables.append( "MATRIX model"+cleanName+"_matrix" )
+                       
+                level_variables.append( "VECTOR model"+cleanName+"_pos" )
+                       
+                level_variables.append( "SVECTOR model"+cleanName+"_rot" )
+                       
+                level_variables.append( "short model"+cleanName+"_isRigidBody" )
+                       
+                level_variables.append( "short model"+cleanName+"_isStaticBody" )
+                       
+                level_variables.append( "short model"+cleanName+"_isPrism" )
+                       
+                level_variables.append( "short model"+cleanName+"_isAnim" )
+                       
+                level_variables.append( "short model"+cleanName+"_isActor" )
+                       
+                level_variables.append( "short model"+cleanName+"_isLevel" )
+                       
+                level_variables.append( "short model"+cleanName+"_isBG" )
+                       
+                level_variables.append( "short model"+cleanName+"_isSprite" )
+                       
+                level_variables.append( "long model"+cleanName+"_p" ) 
+                       
+                level_variables.append( "long model"+cleanName+"_OTz" )
+                       
+                level_variables.append( "BODY model"+cleanName+"_body" )
+                
                 # Write TMESH struct
                 
-                f.write("TMESH "+"model"+cleanName+" = {\n")
+                f.write( "TMESH " + "model" + cleanName + " = {\n" )
                 
-                f.write("\t"+"model"+cleanName+"_mesh,  \n")
+                f.write( "\t" + "model" + cleanName + "_mesh,\n" )
                 
-                f.write("\t"+"model"+cleanName+"_normal,\n")
+                f.write( "\t" + "model" + cleanName + "_normal,\n" )
+
+                level_variables.append( "TMESH " + "model" + cleanName )
+                
+                # ~ level_variables.append( "model" + cleanName + "_mesh"  )
+                
+                # ~ level_variables.append( "model" + cleanName + "_normal" )
                 
                 if len(m.uv_textures) != None:
                 
@@ -1524,6 +1601,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                             f.write("\t"+"model"+cleanName+"_uv,\n")
                 
+                            # ~ level_variables.append( "model" + cleanName + "_uv" )
+                
                         else:
                 
                             f.write("\t0,\n")
@@ -1531,13 +1610,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     f.write("\t0,\n")
                 
-                f.write("\t"+"model"+cleanName+"_color, \n")
+                f.write( "\t"+"model" + cleanName + "_color, \n" )
+                
+                # ~ level_variables.append( "model" + cleanName + "_color" )
                 
                 # According to libgte.h, TMESH.len should be # of vertices. Meh...
                 
-                f.write("\t"+str(len(m.polygons))+"\n")
+                f.write( "\t" + str( len ( m.polygons ) ) + "\n" )
                 
-                f.write("};\n\n")
+                f.write( "};\n\n" )
                 
                 # Write texture binary name and declare TIM_IMAGE
                 # By default, loads the file from the ./TIM folder
@@ -1612,11 +1693,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                                 f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
                                 
+                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_start[]" )
+                                
+                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_end[]" )
+                                
+                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_length" )
+                                
+                                level_variables.append( "TIM_IMAGE tim_" + prefix )
+                                
                                 timList.append(prefix)
 
                 f.write("NODE_DECLARATION\n")
 
-                f.write("MESH mesh"+cleanName+" = {\n")
+                f.write( "MESH mesh" + cleanName + " = {\n" )
                 
                 f.write("\t&model"+ cleanName +",\n")
                 
@@ -1693,7 +1782,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         "\n};\n\n"
                         )
-        
+                
+                level_variables.append( "MESH mesh" + cleanName )
+                
         # Remove portals from mesh list as we don't want them to be exported
         
         meshList = list(bpy.data.meshes)
@@ -1728,6 +1819,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write(",\n")
 
         f.write("\n}; \n")
+        
+        level_variables.append( "MESH * meshes[" + str(len(meshList)) + "]")
 
         # If camAngles is empty, use default camera, and do not include pre-calculated backgrounds
 
@@ -1740,6 +1833,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "\t0,\n\t 0,\n\t { 0 },\n\t { 0 },\n\t 0,\n\t 0\n" + 
                    
                     "};\n\n")
+            
+            level_variables.append( "CAMANGLE camAngle_" + CleanName(defaultCam) )
         
         # If camAngles is populated, use backgrounds and camera angles
         
@@ -1967,7 +2062,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     "\t// Write quad NW, NE, SE, SW\n")
             
             f.write( before )
-                
+            
+            # Feed to level_variables
+                        
+            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_start[]")
+            
+            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_end[]")
+            
+            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_length")
+            
+            level_variables.append( "TIM_IMAGE tim_bg_" + prefix )
+            
+            level_variables.append( "CAMANGLE camAngle_" + prefix )
+            
             for portal in visiblePortal:
                 
                 w = objVertLtoW(portal)
@@ -2033,6 +2140,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t&camAngle_" + prefix + ",\n")
         
         f.write("};\n\n")
+        
+        # Feed to level_variables
+        
+        level_variables.append( "CAMANGLE * camAngles[" + str(len(camAngles)) + "]" )
         
     ## Spatial Partitioning
     
@@ -2366,6 +2477,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                     "};\n\n")
             
+            # Feed to level_variables
+        
+            level_variables.append( "SIBLINGS node" + pName + "_siblings" )
+            
             # Write CHILDREN static objects structure
             
             f.write("CHILDREN node" + pName + "_objects = {\n")
@@ -2396,6 +2511,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("\t}\n" +
                     "};\n\n")
+            
+            # Feed to level_variables
+        
+            level_variables.append( "CHILDREN node" + pName + "_objects" )
             
             # Write CHILDREN rigidbodies structure
             
@@ -2428,6 +2547,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t}\n" +
                     "};\n\n")
             
+            # Feed to level_variables
+        
+            level_variables.append( "CHILDREN node" + pName + "_rigidbodies" )
+            
             # Write NODE structure
                     
             f.write( "NODE node" + pName + " = {\n" +
@@ -2441,6 +2564,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                      "\t&node" + pName + "_rigidbodies\n" +
             
                      "};\n\n" )
+            
+            # Feed to level_variables
+        
+            level_variables.append( "NODE node" + pName )
         
         f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
         
@@ -2451,6 +2578,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
 
         f.write("NODE * curNode =  &node" + CleanName(nodePtr) + ";\n\n")
+
+        # Feed to level_variables
+        
+        level_variables.append( "MESH * actorPtr" )
+
+        level_variables.append( "MESH * levelPtr" )
+
+        level_variables.append( "MESH * propPtr" )
+
+        level_variables.append( "CAMANGLE * camPtr" )
+
+        level_variables.append( "NODE * curNode" )
 
         # Set default camera back in Blender
         
@@ -2467,7 +2606,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         # Get the file content
 
-        f = open(os.path.normpath(c_filepath),"r")
+        f = open(os.path.normpath(level_c),"r")
         
         filedata = f.read()
         
@@ -2482,7 +2621,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         for k in LvlPlanes.keys():
             
             Node_declaration += "NODE node" + CleanName(k) + ";\n\n"
-        
+            
+            level_variables.append( "NODE node" + CleanName(k) )
+            
         # Do the substitution
         
         newdata = filedata.replace("NODE_DECLARATION\n", Node_declaration)
@@ -2499,11 +2640,30 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # Open and write file
         
-        f = open(os.path.normpath(c_filepath),"w")
+        f = open(os.path.normpath(level_c),"w")
         
-        f.write(newdata)
+        f.write( newdata )
         
         f.close()
+        
+
+## Level forward declarations (level.h)
+
+        h = open(os.path.normpath(level_h),"w+")
+        
+        h.write( 
+                
+                '#pragma once\n\n' +
+                
+                '#include "../custom_types.h"\n\n'
+                
+                )
+        
+        for var in level_variables:
+            
+            h.write( "extern " + var + ";\n\n")
+        
+        h.close()
         
         return {'FINISHED'};
  
