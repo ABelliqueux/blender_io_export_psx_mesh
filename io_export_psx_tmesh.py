@@ -716,6 +716,20 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         filepath = filepath.replace(self.filename_ext, "")	# Quick fix to get around the aforementioned 'bugfix'
         
+        # TODO : add option to export scenes as levels
+        
+        # ~ if self.exp_UseScenesAsLevels:
+            
+            # ~ fileName = cleanName(bpy.data.scenes[0].name)
+            
+        # ~ else:
+
+        # For now, use .blender file name
+            
+        # ~ fileName = bpy.path.basename(filepath)
+        
+        fileName  = 'level'
+        
         # We're writing a few files:
         #  - custom_types.h contains the 'engine' 's specific struct definitions
         #  - level.h        contains the forward declaration of the level's variables
@@ -737,9 +751,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # TODO : dynamic filenaming
         
-        level_h = levels_folder + 'level.h'
+        level_h = levels_folder + fileName + '.h'
         
-        level_c = levels_folder + 'level.c'
+        level_c = levels_folder + fileName + '.c'
 
 ### Custom types Header (custom_types.h)
         
@@ -902,14 +916,16 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         # Store every variable name in a list so that we can populate the level.h file later
         
-        level_variables = []
+        level_symbols = []
 
         f = open(os.path.normpath(level_c),"w+")
 
         f.write(
         
-                '#include "level.h"\n\n'
-                                
+                '#include "' + fileName + '.h"\n\n' +
+                
+                "NODE_DECLARATION\n"
+                
                 )
                 
     ## Camera setup
@@ -952,7 +968,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
             if bpy.data.objects[o].type == 'CAMERA':
     
-                f.write("CAMPOS camPos_" + CleanName( bpy.data.objects[ o ].name ) + " = {\n" +
+                f.write("CAMPOS " + fileName + "_camPos_" + CleanName( bpy.data.objects[ o ].name ) + " = {\n" +
     
                             "\t{ " + str( round( -bpy.data.objects[o].location.x * scale ) ) +
                               
@@ -970,7 +986,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                         "};\n\n")
                 
-                level_variables.append( "CAMPOS camPos_" + CleanName( bpy.data.objects[ o ].name ) )
+                level_symbols.append( "CAMPOS " + fileName + "_camPos_" + CleanName( bpy.data.objects[ o ].name ) )
                 
         # Find camera path points and append them to camPathPoints[]
         
@@ -996,7 +1012,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                 if point == 0:
     
-                    f.write("CAMPATH camPath = {\n" +
+                    f.write("CAMPATH " + fileName + "_camPath = {\n" +
     
                             "\t" + str( len( camPathPoints ) ) + ",\n" +
     
@@ -1006,7 +1022,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                             "\t{\n")
                             
-                    level_variables.append( "CAMPATH camPath" )
+                    level_symbols.append( "CAMPATH " + fileName + "_camPath" )
     
                 f.write( "\t\t{ " + str( round( -bpy.data.objects[ camPathPoints[ point ] ].location.x * scale ) ) +
                 
@@ -1026,7 +1042,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # If no camera path points are found, use default
             
-            f.write("CAMPATH camPath = {\n" +
+            f.write("CAMPATH " + fileName + "_camPath = {\n" +
     
                             "\t0,\n" +
     
@@ -1036,7 +1052,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
                             "};\n\n" )
                             
-            level_variables.append( "CAMPATH camPath" )
+            level_symbols.append( "CAMPATH " + fileName + "_camPath" )
         
     ## Lighting setup 
     
@@ -1057,7 +1073,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
        
             pad = 3 - len( bpy.data.lamps )
             
-            f.write( "MATRIX lgtmat = {\n")
+            f.write( "MATRIX " + fileName + "_lgtmat = {\n")
             
             for l in range(len(bpy.data.lamps)):
 
@@ -1101,11 +1117,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("\n\t};\n\n")
             
-            level_variables.append( "MATRIX lgtmat" )
+            level_symbols.append( "MATRIX " + fileName + "_lgtmat" )
             
             # LCM : Local Color Matrix
             
-            f.write( "MATRIX cmat = {\n")
+            f.write( "MATRIX " + fileName + "_cmat = {\n")
             
             LCM = []
         
@@ -1135,7 +1151,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write("\t};\n\n")
             
-            level_variables.append( "MATRIX cmat" )
+            level_symbols.append( "MATRIX " + fileName + "_cmat" )
     
     ## Meshes 
     
@@ -1165,9 +1181,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                 # Write vertices vectors
      
-                f.write( "SVECTOR " + "model" + cleanName + "_mesh[] = {\n" )
+                f.write( "SVECTOR " + fileName + "_model" + cleanName + "_mesh[] = {\n" )
                 
-                level_variables.append( "SVECTOR " + "model" + cleanName + "_mesh[]" )
+                level_symbols.append( "SVECTOR " + "model" + cleanName + "_mesh[]" )
 
                 for i in range( len( m.vertices ) ):
                     
@@ -1197,9 +1213,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Write normals vectors
      
-                f.write("SVECTOR "+"model"+cleanName+"_normal[] = {\n")
+                f.write("SVECTOR " + fileName + "_model"+cleanName+"_normal[] = {\n")
                 
-                level_variables.append( "SVECTOR "+"model"+cleanName+"_normal[]" )
+                level_symbols.append( "SVECTOR " + fileName + "_model"+cleanName+"_normal[]" )
                 
                 for i in range(len(m.vertices)):
                 
@@ -1227,9 +1243,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
      
                         if m.uv_textures[t].data[0].image != None:
      
-                            f.write("SVECTOR "+"model"+cleanName+"_uv[] = {\n")
+                            f.write("SVECTOR " + fileName + "_model"+cleanName+"_uv[] = {\n")
                             
-                            level_variables.append( "SVECTOR "+"model"+cleanName+"_uv[]")
+                            level_symbols.append( "SVECTOR " + fileName + "_model"+cleanName+"_uv[]")
      
                             texture_image = m.uv_textures[t].data[0].image
      
@@ -1278,9 +1294,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             
                 # Write vertex colors vectors
      
-                f.write("CVECTOR "+"model"+cleanName+"_color[] = {\n")
+                f.write("CVECTOR " + fileName + "_model" + cleanName + "_color[] = {\n" )
                 
-                level_variables.append( "CVECTOR "+"model"+cleanName+"_color[]" )
+                level_symbols.append( "CVECTOR " + fileName + "_model" + cleanName + "_color[]" )
                  
                 # If vertex colors exist, use them
                 
@@ -1310,11 +1326,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                         if i % 3 == 0:
                 
-                            f.write("\t80,80,80,0")
-                
+                            f.write("\t80, 80, 80, 0" )
+                                            
                         else:
                 
-                            f.write("\t128,128,128,0")
+                            f.write("\t128, 128, 128, 0" )
                 
                         if i != (len(m.polygons) * 3) - 1:
                 
@@ -1326,9 +1342,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Write polygons index + type
                 
-                f.write( "PRIM "+"model"+cleanName+"_index[] = {\n" )
+                f.write( "PRIM " + fileName + "_model" + cleanName + "_index[] = {\n" )
                 
-                level_variables.append( "PRIM "+"model"+cleanName+"_index[]" )
+                level_symbols.append( "PRIM " + fileName + "_model" + cleanName + "_index[]" )
                 
                 for i in range(len(m.polygons)):
                 
@@ -1447,7 +1463,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                             
                         if i == frame_start :
                         
-                            f.write("VANIM model"+cleanName+"_anim = {\n" +
+                            f.write("VANIM " + fileName + "_model"+cleanName+"_anim = {\n" +
                             
                                     "\t" + str(nFrame) + ",\n" +
                             
@@ -1465,7 +1481,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             
                                     )
                             
-                            level_variables.append( "VANIM model"+cleanName+"_anim" )
+                            level_symbols.append( "VANIM " + fileName + "_model"+cleanName+"_anim" )
                             
                         for v in range(len(nm.vertices)):
                         
@@ -1501,33 +1517,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Write object matrix, rot and pos vectors
                 
-                f.write("MATRIX model"+cleanName+"_matrix = {0};\n" +
+                f.write("MATRIX " + fileName + "_model"+cleanName+"_matrix = {0};\n" +
                        
-                        "VECTOR model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
+                        "VECTOR " + fileName + "_model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
                        
-                        "SVECTOR model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
+                        "SVECTOR " + fileName + "_model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
                        
-                        "short model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
                        
-                        "short model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
+                        "short " + fileName + "_model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
                        
-                        "long model"+cleanName+"_p = 0;\n" +
+                        "long " + fileName + "_model"+cleanName+"_p = 0;\n" +
                        
-                        "long model"+cleanName+"_OTz = 0;\n" +
+                        "long " + fileName + "_model"+cleanName+"_OTz = 0;\n" +
                        
-                        "BODY model"+cleanName+"_body = {\n" +
+                        "BODY " + fileName + "_model"+cleanName+"_body = {\n" +
                        
                         "\t{0, 0, 0, 0},\n" +
                        
@@ -1551,47 +1567,47 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                        
                         "\t};\n\n")
                 
-                level_variables.append( "MATRIX model"+cleanName+"_matrix" )
+                level_symbols.append( "MATRIX  " + fileName + "_model"+cleanName+"_matrix" )
                        
-                level_variables.append( "VECTOR model"+cleanName+"_pos" )
+                level_symbols.append( "VECTOR  " + fileName + "_model"+cleanName+"_pos" )
                        
-                level_variables.append( "SVECTOR model"+cleanName+"_rot" )
+                level_symbols.append( "SVECTOR  " + fileName + "_model"+cleanName+"_rot" )
                        
-                level_variables.append( "short model"+cleanName+"_isRigidBody" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isRigidBody" )
                        
-                level_variables.append( "short model"+cleanName+"_isStaticBody" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isStaticBody" )
                        
-                level_variables.append( "short model"+cleanName+"_isPrism" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isPrism" )
                        
-                level_variables.append( "short model"+cleanName+"_isAnim" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isAnim" )
                        
-                level_variables.append( "short model"+cleanName+"_isActor" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isActor" )
                        
-                level_variables.append( "short model"+cleanName+"_isLevel" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isLevel" )
                        
-                level_variables.append( "short model"+cleanName+"_isBG" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isBG" )
                        
-                level_variables.append( "short model"+cleanName+"_isSprite" )
+                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isSprite" )
                        
-                level_variables.append( "long model"+cleanName+"_p" ) 
+                level_symbols.append( "long  " + fileName + "_model"+cleanName+"_p" ) 
                        
-                level_variables.append( "long model"+cleanName+"_OTz" )
+                level_symbols.append( "long  " + fileName + "_model"+cleanName+"_OTz" )
                        
-                level_variables.append( "BODY model"+cleanName+"_body" )
+                level_symbols.append( "BODY  " + fileName + "_model"+cleanName+"_body" )
                 
                 # Write TMESH struct
                 
-                f.write( "TMESH " + "model" + cleanName + " = {\n" )
+                f.write( "TMESH " + fileName + "_model" + cleanName + " = {\n" )
                 
-                f.write( "\t" + "model" + cleanName + "_mesh,\n" )
+                f.write( "\t" + fileName + "_model" + cleanName + "_mesh,\n" )
                 
-                f.write( "\t" + "model" + cleanName + "_normal,\n" )
+                f.write( "\t" + fileName + "_model" + cleanName + "_normal,\n" )
 
-                level_variables.append( "TMESH " + "model" + cleanName )
+                level_symbols.append( "TMESH " + fileName + "_model" + cleanName )
                 
-                # ~ level_variables.append( "model" + cleanName + "_mesh"  )
+                # ~ level_symbols.append( "model" + cleanName + "_mesh"  )
                 
-                # ~ level_variables.append( "model" + cleanName + "_normal" )
+                # ~ level_symbols.append( "model" + cleanName + "_normal" )
                 
                 if len(m.uv_textures) != None:
                 
@@ -1599,9 +1615,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                         if m.uv_textures[0].data[0].image != None:
                 
-                            f.write("\t"+"model"+cleanName+"_uv,\n")
+                            f.write("\t" + fileName + "_model"+cleanName+"_uv,\n")
                 
-                            # ~ level_variables.append( "model" + cleanName + "_uv" )
+                            # ~ level_symbols.append( "model" + cleanName + "_uv" )
                 
                         else:
                 
@@ -1610,9 +1626,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     f.write("\t0,\n")
                 
-                f.write( "\t"+"model" + cleanName + "_color, \n" )
+                f.write( "\t" + fileName + "_model" + cleanName + "_color, \n" )
                 
-                # ~ level_variables.append( "model" + cleanName + "_color" )
+                # ~ level_symbols.append( "model" + cleanName + "_color" )
                 
                 # According to libgte.h, TMESH.len should be # of vertices. Meh...
                 
@@ -1685,31 +1701,31 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 
                                 # Write corresponding TIM declaration
                                 
-                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_start[];\n")
+                                f.write("extern unsigned long " + "_binary_TIM_" + prefix + "_tim_start[];\n")
 
-                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_end[];\n")
+                                f.write("extern unsigned long " + "_binary_TIM_" + prefix + "_tim_end[];\n")
 
-                                f.write("extern unsigned long "+"_binary_TIM_" + prefix + "_tim_length;\n\n")
+                                f.write("extern unsigned long " + "_binary_TIM_" + prefix + "_tim_length;\n\n")
 
                                 f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
                                 
-                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_start[]" )
+                                level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_start[]" )
                                 
-                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_end[]" )
+                                level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_end[]" )
                                 
-                                level_variables.append( "unsigned long "+"_binary_TIM_" + prefix + "_tim_length" )
+                                level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_length" )
                                 
-                                level_variables.append( "TIM_IMAGE tim_" + prefix )
+                                level_symbols.append( "TIM_IMAGE tim_" + prefix )
                                 
                                 timList.append(prefix)
 
-                f.write("NODE_DECLARATION\n")
+                # ~ f.write("NODE_DECLARATION\n")
 
-                f.write( "MESH mesh" + cleanName + " = {\n" )
+                f.write( "MESH " + fileName + "_mesh" + cleanName + " = {\n" )
                 
-                f.write("\t&model"+ cleanName +",\n")
+                f.write("\t&" + fileName + "_model"+ cleanName +",\n")
                 
-                f.write("\tmodel" + cleanName + "_index,\n")
+                f.write("\t" + fileName + "_model" + cleanName + "_index,\n")
                 
                 if len(m.uv_textures) != None:
                 
@@ -1738,37 +1754,37 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                             "\t0,\n")     
                     
-                f.write("\t&model"+cleanName+"_matrix,\n" +
+                f.write("\t&" + fileName + "_model"+cleanName+"_matrix,\n" +
                      
-                        "\t&model"+cleanName+"_pos,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_pos,\n" +
                      
-                        "\t&model"+cleanName+"_rot,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_rot,\n" +
                      
-                        "\t&model"+cleanName+"_isRigidBody,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isRigidBody,\n" +
                      
-                        "\t&model"+cleanName+"_isStaticBody,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isStaticBody,\n" +
                      
-                        "\t&model"+cleanName+"_isPrism,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isPrism,\n" +
                      
-                        "\t&model"+cleanName+"_isAnim,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isAnim,\n" +
                      
-                        "\t&model"+cleanName+"_isActor,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isActor,\n" +
                      
-                        "\t&model"+cleanName+"_isLevel,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isLevel,\n" +
                      
-                        "\t&model"+cleanName+"_isBG,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isBG,\n" +
                      
-                        "\t&model"+cleanName+"_isSprite,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_isSprite,\n" +
                      
-                        "\t&model"+cleanName+"_p,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_p,\n" +
                      
-                        "\t&model"+cleanName+"_OTz,\n" +
+                        "\t&" + fileName + "_model"+cleanName+"_OTz,\n" +
                      
-                        "\t&model"+cleanName+"_body,\n")
+                        "\t&" + fileName + "_model"+cleanName+"_body,\n")
                         
                 if m.get("isAnim") is not None and m["isAnim"] != 0:
                         
-                        f.write("\t&model"+cleanName+"_anim,\n")
+                        f.write("\t&" + fileName + "_model"+cleanName+"_anim,\n")
                 else:
                         
                         f.write("\t0,\n")
@@ -1782,8 +1798,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         "\n};\n\n"
                         )
-                
-                level_variables.append( "MESH mesh" + cleanName )
+                                
+                level_symbols.append( "MESH " + fileName + "_mesh" + cleanName )
                 
         # Remove portals from mesh list as we don't want them to be exported
         
@@ -1806,35 +1822,39 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 portalList.append( bpy.data.objects[mesh.name] )
         
-        f.write("MESH * meshes[" + str(len(meshList)) + "] = {\n")
+        f.write("MESH * " + fileName + "_meshes[" + str( len(meshList ) ) + "] = {\n")
 
         for k in range(len(meshList)):
 
             cleanName = CleanName(meshList[k].name)
 
-            f.write("\t&mesh" + cleanName)
+            f.write("\t&" + fileName + "_mesh" + cleanName)
 
             if k != len(meshList) - 1:
 
                 f.write(",\n")
 
-        f.write("\n}; \n")
+        f.write("\n}; \n\n")
         
-        level_variables.append( "MESH * meshes[" + str(len(meshList)) + "]")
+        f.write("int " + fileName + "_meshes_length = " + str( len( meshList ) ) + ";\n\n")
+        
+        level_symbols.append( "MESH * " + fileName + "_meshes[" + str(len(meshList)) + "]")
+        
+        level_symbols.append( "int " + fileName + "_meshes_length" )
 
         # If camAngles is empty, use default camera, and do not include pre-calculated backgrounds
 
         if not camAngles:
 
-            f.write("CAMANGLE camAngle_" + CleanName(defaultCam) + " = {\n" +
+            f.write("CAMANGLE " + fileName + "_camAngle_" + CleanName(defaultCam) + " = {\n" +
                    
-                    "\t&camPos_" + CleanName(defaultCam) + ",\n" +
+                    "\t&" + fileName + "_camPos_" + CleanName(defaultCam) + ",\n" +
                    
                     "\t0,\n\t 0,\n\t { 0 },\n\t { 0 },\n\t 0,\n\t 0\n" + 
                    
                     "};\n\n")
             
-            level_variables.append( "CAMANGLE camAngle_" + CleanName(defaultCam) )
+            level_symbols.append( "CAMANGLE " + fileName + "_camAngle_" + CleanName(defaultCam) )
         
         # If camAngles is populated, use backgrounds and camera angles
         
@@ -2051,9 +2071,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Write corresponding CamAngle struct
             
-            f.write("CAMANGLE camAngle_" + prefix + " = {\n" +
+            f.write("CAMANGLE " + fileName + "_camAngle_" + prefix + " = {\n" +
             
-                    "\t&camPos_" + prefix + ",\n" +
+                    "\t&" + fileName + "_camPos_" + prefix + ",\n" +
             
                     "\t&tim_bg_" + prefix + ",\n" +
             
@@ -2063,17 +2083,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             f.write( before )
             
-            # Feed to level_variables
+            # Feed to level_symbols
                         
-            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_start[]")
+            level_symbols.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_start[]")
             
-            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_end[]")
+            level_symbols.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_end[]")
             
-            level_variables.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_length")
+            level_symbols.append( "unsigned long "+"_binary_TIM_bg_" + prefix + "_tim_length")
             
-            level_variables.append( "TIM_IMAGE tim_bg_" + prefix )
+            level_symbols.append( "TIM_IMAGE tim_bg_" + prefix )
             
-            level_variables.append( "CAMANGLE camAngle_" + prefix )
+            level_symbols.append( "CAMANGLE " + fileName + "_camAngle_" + prefix )
             
             for portal in visiblePortal:
                 
@@ -2131,19 +2151,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
         # Write camera angles in an array for loops
         
-        f.write("CAMANGLE * camAngles[" + str(len(camAngles)) + "] = {\n")
+        f.write("CAMANGLE * " + fileName + "_camAngles[" + str(len(camAngles)) + "] = {\n")
         
         for camera in camAngles:
         
             prefix = CleanName(camera.name)     
         
-            f.write("\t&camAngle_" + prefix + ",\n")
+            f.write("\t&" + fileName + "_camAngle_" + prefix + ",\n")
         
         f.write("};\n\n")
         
-        # Feed to level_variables
+        # Feed to level_symbols
         
-        level_variables.append( "CAMANGLE * camAngles[" + str(len(camAngles)) + "]" )
+        level_symbols.append( "CAMANGLE * " + fileName + "_camAngles[" + str(len(camAngles)) + "]" )
         
     ## Spatial Partitioning
     
@@ -2446,7 +2466,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     nSiblings += len( PlanesObjects[ p ][ 'siblings' ][ 'W' ] )
                 
-            f.write("SIBLINGS node" + pName + "_siblings = {\n" + 
+            f.write("SIBLINGS " + fileName + "_node" + pName + "_siblings = {\n" + 
             
                     "\t" + str(nSiblings) + ",\n" +
             
@@ -2460,7 +2480,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     for sibling in PlanesObjects[p]['siblings'][side]:
                 
-                        f.write("\t\t&node" + CleanName(sibling) )
+                        f.write("\t\t&" + fileName + "_node" + CleanName(sibling) )
                         
                         if i < ( nSiblings - 1 ) :
                     
@@ -2477,13 +2497,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                     "};\n\n")
             
-            # Feed to level_variables
+            # Feed to level_symbols
         
-            level_variables.append( "SIBLINGS node" + pName + "_siblings" )
+            level_symbols.append( "SIBLINGS " + fileName + "_node" + pName + "_siblings" )
             
             # Write CHILDREN static objects structure
             
-            f.write("CHILDREN node" + pName + "_objects = {\n")
+            f.write("CHILDREN " + fileName + "_node" + pName + "_objects = {\n")
             
             if 'objects' in PlanesObjects[p]:
             
@@ -2494,7 +2514,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 for obj in PlanesObjects[p]['objects']:
                     
-                    f.write( "\t\t&mesh" + CleanName(obj))
+                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(obj))
                     
                     if i < len(PlanesObjects[p]['objects']) - 1:
                     
@@ -2512,13 +2532,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t}\n" +
                     "};\n\n")
             
-            # Feed to level_variables
+            # Feed to level_symbols
         
-            level_variables.append( "CHILDREN node" + pName + "_objects" )
+            level_symbols.append( "CHILDREN " + fileName + "_node" + pName + "_objects" )
             
             # Write CHILDREN rigidbodies structure
             
-            f.write("CHILDREN node" + pName + "_rigidbodies = {\n")
+            f.write("CHILDREN " + fileName + "_node" + pName + "_rigidbodies = {\n")
             
             if 'rigidbodies' in PlanesRigidBodies[p]:
             
@@ -2529,7 +2549,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 for obj in PlanesRigidBodies[p]['rigidbodies']:
                     
-                    f.write( "\t\t&mesh" + CleanName(obj))
+                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(obj))
                     
                     if i < len(PlanesRigidBodies[p]['rigidbodies']) - 1:
                     
@@ -2547,49 +2567,49 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t}\n" +
                     "};\n\n")
             
-            # Feed to level_variables
+            # Feed to level_symbols
         
-            level_variables.append( "CHILDREN node" + pName + "_rigidbodies" )
+            level_symbols.append( "CHILDREN " + fileName + "_node" + pName + "_rigidbodies" )
             
             # Write NODE structure
                     
-            f.write( "NODE node" + pName + " = {\n" +
+            f.write( "NODE " + fileName + "_node" + pName + " = {\n" +
             
-                     "\t&mesh" + pName + ",\n" +
+                     "\t&" + fileName + "_mesh" + pName + ",\n" +
             
-                     "\t&node" + pName + "_siblings,\n" +
+                     "\t&" + fileName + "_node" + pName + "_siblings,\n" +
             
-                     "\t&node" + pName + "_objects,\n" +
+                     "\t&" + fileName + "_node" + pName + "_objects,\n" +
             
-                     "\t&node" + pName + "_rigidbodies\n" +
+                     "\t&" + fileName + "_node" + pName + "_rigidbodies\n" +
             
                      "};\n\n" )
             
-            # Feed to level_variables
+            # Feed to level_symbols
         
-            level_variables.append( "NODE node" + pName )
+            level_symbols.append( "NODE " + fileName + "_node" + pName )
         
-        f.write("MESH * actorPtr = &mesh" + CleanName(actorPtr) + ";\n")
+        f.write("MESH * " + fileName + "_actorPtr = &" + fileName + "_mesh" + CleanName(actorPtr) + ";\n")
         
-        f.write("MESH * levelPtr = &mesh" + CleanName(levelPtr) + ";\n")
+        f.write("MESH * " + fileName + "_levelPtr = &" + fileName + "_mesh" + CleanName(levelPtr) + ";\n")
         
-        f.write("MESH * propPtr  = &mesh" + propPtr + ";\n\n")
+        f.write("MESH * " + fileName + "_propPtr  = &" + fileName + "_mesh" + propPtr + ";\n\n")
         
-        f.write("CAMANGLE * camPtr =  &camAngle_" + CleanName(defaultCam) + ";\n\n")
+        f.write("CAMANGLE * " + fileName + "_camPtr =  &" + fileName + "_camAngle_" + CleanName(defaultCam) + ";\n\n")
 
-        f.write("NODE * curNode =  &node" + CleanName(nodePtr) + ";\n\n")
+        f.write("NODE * " + fileName + "_curNode =  &" + fileName + "_node" + CleanName(nodePtr) + ";\n\n")
 
-        # Feed to level_variables
+        # Feed to level_symbols
         
-        level_variables.append( "MESH * actorPtr" )
+        level_symbols.append( "MESH * " + fileName + "_actorPtr" )
 
-        level_variables.append( "MESH * levelPtr" )
+        level_symbols.append( "MESH * " + fileName + "_levelPtr" )
 
-        level_variables.append( "MESH * propPtr" )
+        level_symbols.append( "MESH * " + fileName + "_propPtr" )
 
-        level_variables.append( "CAMANGLE * camPtr" )
+        level_symbols.append( "CAMANGLE * " + fileName + "_camPtr" )
 
-        level_variables.append( "NODE * curNode" )
+        level_symbols.append( "NODE * " + fileName + "_curNode" )
 
         # Set default camera back in Blender
         
@@ -2618,21 +2638,25 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         Node_declaration = ''
 
+        
+
         for k in LvlPlanes.keys():
             
-            Node_declaration += "NODE node" + CleanName(k) + ";\n\n"
+            Node_declaration += "NODE " + fileName + "_node" + CleanName(k) + ";\n\n"
             
-            level_variables.append( "NODE node" + CleanName(k) )
+            level_symbols.append( "NODE " + fileName + "_node" + CleanName(k) )
             
-        # Do the substitution
+        # Do the substitution only once
         
-        newdata = filedata.replace("NODE_DECLARATION\n", Node_declaration)
+        newdata = filedata.replace("NODE_DECLARATION\n", Node_declaration, 1)
+        
+        newdata = filedata.replace("NODE_DECLARATION\n", "")
 
         # Now substitute mesh name for corresponding plane's NODE
 
         for moveable in PropPlane:
 
-            newdata = newdata.replace("subs_" + moveable.name, "&node" + PropPlane[moveable])
+            newdata = newdata.replace("subs_" + moveable.name, "&" + fileName + "_node" + PropPlane[moveable])
 
         # Subsitute mesh name with 0 in the other MESH structs
         
@@ -2659,9 +2683,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 )
         
-        for var in level_variables:
+        for symbol in level_symbols:
             
-            h.write( "extern " + var + ";\n\n")
+            h.write( "extern " + symbol + ";\n\n")
         
         h.close()
         
