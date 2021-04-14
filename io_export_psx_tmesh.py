@@ -1707,7 +1707,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                                 f.write("extern unsigned long " + "_binary_TIM_" + prefix + "_tim_length;\n\n")
 
-                                f.write("TIM_IMAGE tim_" + prefix + ";\n\n")
+                                f.write("TIM_IMAGE " + fileName + "_tim_" + prefix + ";\n\n")
                                 
                                 level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_start[]" )
                                 
@@ -1715,7 +1715,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 
                                 level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_length" )
                                 
-                                level_symbols.append( "TIM_IMAGE tim_" + prefix )
+                                level_symbols.append( "TIM_IMAGE " + fileName + "_tim_" + prefix )
                                 
                                 timList.append(prefix)
 
