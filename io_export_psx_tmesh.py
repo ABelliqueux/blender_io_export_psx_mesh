@@ -30,7 +30,8 @@ from bpy.props import (CollectionProperty,
                        StringProperty,
                        BoolProperty,
                        EnumProperty,
-                       FloatProperty
+                       FloatProperty,
+                       IntProperty
                        )
 
 from bpy_extras.io_utils import (ExportHelper,
@@ -70,6 +71,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         default=65,
 
         )
+        
     
     exp_Precalc = BoolProperty(
 
@@ -106,6 +108,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
         default = False
     )
+    
+    exp_LvlNbr = IntProperty(
+
+        name="Level number",
+
+        description="That nimber is used in the symbols name.",
+
+        min=1, max=10,
+
+        default=0,
+
+        )
     
     
     def execute(self, context):
@@ -728,7 +742,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
         # ~ fileName = bpy.path.basename(filepath)
         
-        fileName  = 'level'
+        lvlNbr = self.exp_LvlNbr
+        
+        fileName  = 'level' + str( lvlNbr )
         
         # We're writing a few files:
         #  - custom_types.h contains the 'engine' 's specific struct definitions
@@ -831,23 +847,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tPRIM    *    index;\n" +
                 "\tTIM_IMAGE *  tim;  \n" + 
                 "\tunsigned long * tim_data;\n"+
-                "\tMATRIX  *    mat;\n" + 
-                "\tVECTOR  *    pos;\n" + 
-                "\tSVECTOR *    rot;\n" +
-                "\tshort   *    isRigidBody;\n" +
-                "\tshort   *    isStaticBody;\n" +
-                "\tshort   *    isPrism;\n" +
-                "\tshort   *    isAnim;\n" +
-                "\tshort   *    isActor;\n" +
-                "\tshort   *    isLevel;\n" +
-                "\tshort   *    isBG;\n" +
-                "\tshort   *    isSprite;\n" +
-                "\tlong    *    p;\n" + 
-                "\tlong    *    OTz;\n" + 
-                "\tBODY    *    body;\n" + 
-                "\tVANIM   *    anim;\n" + 
+                "\tMATRIX      mat;\n" + 
+                "\tVECTOR      pos;\n" + 
+                "\tSVECTOR     rot;\n" +
+                "\tshort       isRigidBody;\n" +
+                "\tshort       isStaticBody;\n" +
+                "\tshort       isPrism;\n" +
+                "\tshort       isAnim;\n" +
+                "\tshort       isActor;\n" +
+                "\tshort       isLevel;\n" +
+                "\tshort       isBG;\n" +
+                "\tshort       isSprite;\n" +
+                "\tlong        p;\n" + 
+                "\tlong        OTz;\n" + 
+                "\tBODY     *  body;\n" + 
+                "\tVANIM    *  anim;\n" + 
                 "\tstruct NODE   *    node;\n" + 
-                "\tVECTOR       pos2D;\n" + 
+                "\tVECTOR      pos2D;\n" + 
                 "\t} MESH;\n\n")
         
         #QUAD
@@ -910,6 +926,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCHILDREN * rigidbodies;\n" + 
                 "\t} NODE;\n\n")
 
+        # LEVEL
+        
+        h.write("typedef struct LEVEL {\n" + 
+                "\tMATRIX * cmat;\n" + 
+                "\tMATRIX * lgtmat;\n" +
+                "\tMESH   ** meshes;\n" +
+                "\tint * meshes_length;\n" +
+                "\tMESH * actorPtr;\n" +
+                "\tMESH * levelPtr;\n" +
+                "\tMESH * propPtr;\n" +
+                "\tCAMANGLE * camPtr;\n" +
+                "\tCAMPATH * camPath;\n" +
+                "\tCAMANGLE ** camAngles;\n" +
+                "\tNODE * curNode;\n" +
+                "\tMESH * meshPlan; // This one is temporary\n" +
+                "\t} LEVEL;\n")
+
         h.close()
 
 ## Level Data (level.c)
@@ -917,6 +950,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Store every variable name in a list so that we can populate the level.h file later
         
         level_symbols = []
+
+        level_symbols.append("LEVEL " + fileName)
 
         f = open(os.path.normpath(level_c),"w+")
 
@@ -1517,31 +1552,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Write object matrix, rot and pos vectors
                 
-                f.write("MATRIX " + fileName + "_model"+cleanName+"_matrix = {0};\n" +
+                f.write(
+                
+                        # ~ "MATRIX " + fileName + "_model"+cleanName+"_matrix = {0};\n" +
                        
-                        "VECTOR " + fileName + "_model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
+                        # ~ "VECTOR " + fileName + "_model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
                        
-                        "SVECTOR " + fileName + "_model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
+                        # ~ "SVECTOR " + fileName + "_model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
                        
-                        "short " + fileName + "_model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
+                        # ~ "short " + fileName + "_model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
                        
-                        "long " + fileName + "_model"+cleanName+"_p = 0;\n" +
+                        # ~ "long " + fileName + "_model"+cleanName+"_p = 0;\n" +
                        
-                        "long " + fileName + "_model"+cleanName+"_OTz = 0;\n" +
+                        # ~ "long " + fileName + "_model"+cleanName+"_OTz = 0;\n" +
                        
                         "BODY " + fileName + "_model"+cleanName+"_body = {\n" +
                        
@@ -1567,31 +1604,31 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                        
                         "\t};\n\n")
                 
-                level_symbols.append( "MATRIX  " + fileName + "_model"+cleanName+"_matrix" )
+                # ~ level_symbols.append( "MATRIX  " + fileName + "_model"+cleanName+"_matrix" )
                        
-                level_symbols.append( "VECTOR  " + fileName + "_model"+cleanName+"_pos" )
+                # ~ level_symbols.append( "VECTOR  " + fileName + "_model"+cleanName+"_pos" )
                        
-                level_symbols.append( "SVECTOR  " + fileName + "_model"+cleanName+"_rot" )
+                # ~ level_symbols.append( "SVECTOR  " + fileName + "_model"+cleanName+"_rot" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isRigidBody" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isRigidBody" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isStaticBody" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isStaticBody" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isPrism" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isPrism" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isAnim" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isAnim" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isActor" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isActor" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isLevel" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isLevel" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isBG" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isBG" )
                        
-                level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isSprite" )
+                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isSprite" )
                        
-                level_symbols.append( "long  " + fileName + "_model"+cleanName+"_p" ) 
+                # ~ level_symbols.append( "long  " + fileName + "_model"+cleanName+"_p" ) 
                        
-                level_symbols.append( "long  " + fileName + "_model"+cleanName+"_OTz" )
+                # ~ level_symbols.append( "long  " + fileName + "_model"+cleanName+"_OTz" )
                        
                 level_symbols.append( "BODY  " + fileName + "_model"+cleanName+"_body" )
                 
@@ -1739,7 +1776,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                             prefix   = CleanName(prefix)
                             
-                            f.write("\t&tim_"+ prefix + ",\n")
+                            f.write("\t&" + fileName + "_tim_"+ prefix + ",\n")
                        
                             f.write("\t_binary_TIM_" + prefix + "_tim_start,\n")
                        
@@ -1754,33 +1791,45 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                             "\t0,\n")     
                     
-                f.write("\t&" + fileName + "_model"+cleanName+"_matrix,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_pos,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_rot,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isRigidBody,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isStaticBody,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isPrism,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isAnim,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isActor,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isLevel,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isBG,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_isSprite,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_p,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_OTz,\n" +
-                     
-                        "\t&" + fileName + "_model"+cleanName+"_body,\n")
+                f.write(
+                        
+                        "\t{0},\n" +
+                       
+                        "\t{" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," 
+                        
+                              + str(round(-bpy.data.objects[m.name].location.z * scale)) + ","
+                        
+                              + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0},\n" +
+                       
+                        "\t{"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + ","
+                        
+                             + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," 
+                        
+                             + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "},\n" +
+                       
+                        "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isStaticBody'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isPrism'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isAnim'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isActor'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isLevel'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isBG'])) + ",\n" +
+                       
+                        "\t" + str(int(chkProp['isSprite'])) + ",\n" +
+                       
+                        "\t0,\n" +
+                       
+                        "\t0,\n" + 
+                        
+                        "\t&" + fileName + "_model"+cleanName+"_body,\n"
+                        
+                        )
                         
                 if m.get("isAnim") is not None and m["isAnim"] != 0:
                         
@@ -2139,7 +2188,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
             for target in range( len( visibleTarget ) ) :
                 
-                f.write( "\t\t&mesh" + CleanName(visibleTarget[target].name) )
+                f.write( "\t\t&" + fileName + "_mesh" + CleanName(visibleTarget[target].name) )
                     
                 if target < len(visibleTarget) - 1:
                     
@@ -2610,6 +2659,38 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         level_symbols.append( "CAMANGLE * " + fileName + "_camPtr" )
 
         level_symbols.append( "NODE * " + fileName + "_curNode" )
+
+        # Write LEVEL struct
+        
+        f.write(
+        
+            "LEVEL " + fileName + " = {\n" +
+    
+            "\t&" + fileName + "_cmat,\n" +
+            
+            "\t&" + fileName + "_lgtmat,\n" +
+            
+            "\t&" + fileName + "_meshes,\n" +
+            
+            "\t&" + fileName + "_meshes_length,\n" +
+            
+            "\t&" + fileName + "_mesh" + CleanName(actorPtr)+ ",\n" +
+
+            "\t&" + fileName + "_mesh" + CleanName(levelPtr)+ ",\n" +
+
+            "\t&" + fileName + "_mesh" + propPtr + ",\n" +
+                
+            "\t&" + fileName + "_camAngle_" + CleanName(defaultCam) + ",\n" +
+                
+            "\t&" + fileName + "_camPath,\n" +
+                
+            "\t&" + fileName + "_camAngles,\n" +
+                
+            "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
+                
+            "\t&" + fileName + "_meshPlan\n" +
+            
+            "};\n\n")
 
         # Set default camera back in Blender
         
