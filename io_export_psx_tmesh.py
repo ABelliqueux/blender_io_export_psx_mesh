@@ -113,12 +113,32 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         name="Level number",
 
-        description="That nimber is used in the symbols name.",
+        description="That number is used in the symbols name.",
 
         min=1, max=10,
 
         default=0,
 
+        )
+    
+    exp_expMode = BoolProperty(
+
+        name="Use blender file name",
+
+        description="By default, files are exported as 'level*' in a folder named 'levels'. Enable to use the blender file name.",
+
+        default=False,
+
+        )
+        
+    exp_CustomTexFolder = StringProperty(
+    
+        name = "Textures Dir",
+    
+        description = "By default, the script looks for / saves textures in the ./TEX folder. You can tell it to use a different folder.",
+        
+        default="TEX"
+    
         )
     
     
@@ -133,6 +153,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         global tpageY
         
         global TIMbpp
+        
+        global timFolder
         
     ### Functions
 
@@ -373,9 +395,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         def convertBGtoTIM( filePathWithExt, colors = 256, bpp = 8, timX = 640, timY = 0, clutX = 0, clutY = 480, transparency = 'alpha'):
             
+            global timFolder
+            
             # By default, converts a RGB to 8bpp, 256 colors indexed PNG, then to a 8bpp TIM image
             
             filePathWithoutExt = filePathWithExt[ : filePathWithExt.rfind('.') ]
+            
+            fileBaseName = os.path.basename(filePathWithoutExt)
             
             # For windows users, add '.exe' to the command
             
@@ -427,7 +453,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
             
-            subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", filePathWithoutExt + ".tim", filePathWithExt ] )
+            subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", timFolder + os.sep + fileBaseName + ".tim", filePathWithExt ] )
 
         def VramIsFull( size ):
             
@@ -568,6 +594,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                 freeClutSlot -= 1
         
+        
+        # Set rendering resolution to 320x240
+    
+        bpy.context.scene.render.resolution_x = 320
+        
+        bpy.context.scene.render.resolution_y = 240
+        
     ### VRam Layout
         
         nextTpage = 320
@@ -612,11 +645,33 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # Get working directory path
         
+        workFolder = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
+        
+        # Get export directory path
+        
         filepath = bpy.data.filepath
         
-        folder = os.path.dirname(bpy.path.abspath(filepath))
+        if self.exp_expMode:
+            
+            filepath = self.filepath
+            
+        expFolder = os.path.dirname(bpy.path.abspath(filepath))
         
-        dirpath = os.path.join(folder, "TIM")
+        # Get texture folder, default to ./TEX
+        
+        textureFolder = os.path.join( workFolder, "TEX")
+        
+        if self.exp_CustomTexFolder != "TEX":
+            
+            textureFolder = os.path.join( expFolder, self.exp_CustomTexFolder)
+        
+        timFolder = os.path.join( expFolder, "TIM")
+        
+        # If the TIM folder doesn't exist, create it
+        
+        if not os.path.exists(timFolder):
+                
+                os.mkdir(timFolder)
         
     ### Export pre-calculated backgrounds and construct a list of visible objects for each camera angle
         
@@ -632,12 +687,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         if self.exp_Precalc:
 
-            # Set rendering resolution
-                    
-            bpy.context.scene.render.resolution_x = 320
-            
-            bpy.context.scene.render.resolution_y = 240
-
             # Get BGs TIM size depending on mode
             
             timSize = bpy.context.scene.render.resolution_x >> TIMshift
@@ -646,7 +695,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Create folder if it doesn't exist
             
-            os.makedirs(dirpath, exist_ok = 1)
+            # ~ os.makedirs(timFolder, exist_ok = 1)
             
             # Set file format config
             
@@ -676,7 +725,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                 if o.type == 'CAMERA' and o.name.startswith("camPath"):
                     
-                    filepath = folder + os.sep + "TIM" + os.sep 
+                    filepath = textureFolder + os.sep
                     
                     filename = "bg_" + CleanName(o.name)
                     
@@ -696,7 +745,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     
                     if not VramIsFull( bpy.context.scene.render.resolution_x ):
                     
-                        convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                        convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot, transparency = "nonblack" )
                     
                     else:
                 
@@ -706,7 +755,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         if not VramIsFull( bpy.context.scene.render.resolution_x ):
                         
-                            convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
+                            convertBGtoTIM( filepath + filename + fileext , bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot, transparency = "nonblack" )
                         
                     # Add camera object to camAngles
                     
@@ -738,33 +787,43 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
         # ~ else:
 
-        # For now, use .blender file name
-            
-        # ~ fileName = bpy.path.basename(filepath)
-        
-        lvlNbr = self.exp_LvlNbr
-        
-        fileName  = 'level' + str( lvlNbr )
-        
         # We're writing a few files:
         #  - custom_types.h contains the 'engine' 's specific struct definitions
         #  - level.h        contains the forward declaration of the level's variables
         #  - level.c        contains the initialization and data of those variables
         
-        # 'custom_types.h' goes in project's root
+        # 'custom_types.h' goes in export folder
         
-        custom_types_h = folder + os.sep + 'custom_types.h'
+        custom_types_h = expFolder + os.sep + 'custom_types.h'
+
+        # If export mode is set to Use blender file name
         
+        # ~ if self.exp_expMode:
+        
+            # ~ fileName = bpy.path.basename(filepath)
+            
+            # ~ filepath = self.filepath
+        
+            # ~ folder = os.path.dirname(bpy.path.abspath(filepath))
+                        
+            # ~ levels_folder = folder + os.sep
+        
+        # ~ else:
+        
+        lvlNbr = self.exp_LvlNbr
+        
+        fileName  = 'level' + str( lvlNbr )
+    
         # Levels files go in ./levels/
         
         # If ./levels does not exist, create it
         
-        if not os.path.exists(folder + os.sep + 'levels'):
+        if not os.path.exists( expFolder + os.sep + 'levels'):
             
-            os.mkdir(folder + os.sep + 'levels')
+            os.mkdir( expFolder + os.sep + 'levels')
         
-        levels_folder = folder + os.sep + 'levels' + os.sep
-        
+        levels_folder = expFolder + os.sep + 'levels' + os.sep
+    
         # TODO : dynamic filenaming
         
         level_h = levels_folder + fileName + '.h'
@@ -1280,7 +1339,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
      
                             f.write("SVECTOR " + fileName + "_model"+cleanName+"_uv[] = {\n")
                             
-                            level_symbols.append( "SVECTOR " + fileName + "_model"+cleanName+"_uv[]")
+                            level_symbols.append( "SVECTOR " + fileName + "_model" + cleanName + "_uv[]" )
      
                             texture_image = m.uv_textures[t].data[0].image
      
@@ -1320,9 +1379,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                             if texture_image.filepath == '':
 
-                                os.makedirs(dirpath, exist_ok = 1)
+                                # ~ os.makedirs(dirpath, exist_ok = 1)
 
-                                texture_image.filepath_raw = folder + os.sep + "TIM" + os.sep + CleanName(texture_image.name) + "." + texture_image.file_format
+                                texture_image.filepath_raw = textureFolder + os.sep + CleanName(texture_image.name) + "." + texture_image.file_format
 
                             texture_image.save()
                             
@@ -1704,9 +1763,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                     
                                     tex_name = tex_name[ : tex_name.rfind( '.' ) ]
 
-                                # TODO : Add a way to arrange TIM's VM layout to avoid overlapping
-                                
-                                filePathWithExt = folder + os.sep + "TIM" + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower()
+                                filePathWithExt = textureFolder + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower()
                                 
                                 if not VramIsFull( bpy.context.scene.render.resolution_x ):
                     
@@ -2670,7 +2727,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             "\t&" + fileName + "_lgtmat,\n" +
             
-            "\t&" + fileName + "_meshes,\n" +
+            "\t(MESH **)&" + fileName + "_meshes,\n" +
             
             "\t&" + fileName + "_meshes_length,\n" +
             
@@ -2684,7 +2741,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
             "\t&" + fileName + "_camPath,\n" +
                 
-            "\t&" + fileName + "_camAngles,\n" +
+            "\t(CAMANGLE **)&" + fileName + "_camAngles,\n" +
                 
             "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
                 
