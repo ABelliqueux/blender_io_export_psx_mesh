@@ -43,6 +43,7 @@ http://download.blender.org/release/Blender2.79/
 ```bash
 git clone https://github.com/ABelliqueux/blender_io_export_psx_mesh.git
 ```
+3. Enable the add-on in Blender by going to user preferences, Add-ons tab, and enable `Import-Export: PSX TMesh exporter`.  
 
 You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.  
 Windows executables are provided for convenience in this repo.  
