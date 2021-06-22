@@ -1,8 +1,9 @@
 ![Pic or it didn't happen](blender-psx.jpg)
 
-# Blender PSX Level export 
+# Blender 3dcam PSX engine Level exporter
 
-Blender <= 2.79b plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
+This Blender plugin is to be used in conjunction with the [3dcam PSX engine](https://github.com/ABelliqueux/3dcam-headers).  
+It allows exporting a gouraud shaded, UV textured Blender scene to a format compatible with the aforementionned engine.
 
 ![3d scene](gif/3d.gif)
 ![pre-rendered BGs](gif/precalc.gif)
@@ -55,15 +56,13 @@ http://download.blender.org/release/Blender2.79/
 git clone https://github.com/ABelliqueux/blender_io_export_psx_mesh.git
 ```
 
-You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.
+You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.  
+Windows executables are provided for convenience in this repo.  
+For users with Imagemagick installed, there is an option when exporting to use that instead of pngquant.  
 
-Windows executables are provided for convenience in this repo.
-
-For users with Imagemagick installed, there is an option when exporting to use that instead of pngquant.
-
-On Linux : `~/.config/blender/2.79/scripts/addons`
-On macOS : `./Blender.app/Contents/Resources/2.79/addons`
-On Windows : `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.93\`
+On Linux : `~/.config/blender/2.79/scripts/addons`  
+On macOS : `./Blender.app/Contents/Resources/2.79/addons`  
+On Windows : `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.93\`  
 
 # Compiling
 
