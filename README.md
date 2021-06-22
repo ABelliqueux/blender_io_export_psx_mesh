@@ -1,11 +1,11 @@
-![Pic or it didn't happen](blender-psx.jpg)
+![Pic or it didn't happen](https://wiki.arthus.net/assets/blender-psx.jpg)
 
 # Blender 3dcam PSX engine Level exporter
 
 This Blender plugin is to be used in conjunction with the [3dcam PSX engine](https://github.com/ABelliqueux/3dcam-headers).  
 It allows exporting a gouraud shaded, UV textured Blender scene to a format compatible with the aforementionned engine.  
 
-![3d scene](gif/demo.gif)
+![3d scene](https://wiki.arthus.net/assets/demo.gif)
 
 [Check the Wiki](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki) for in-depth informations.
 
@@ -23,7 +23,7 @@ It allows exporting a gouraud shaded, UV textured Blender scene to a format comp
   * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
   * VRam auto layout for TIMs
 
-![comparison](gif/rt-8b-4b.gif)  
+![comparison](https://wiki.arthus.net/assets/rt-8b-4b.gif)  
 Real-time 3D / 8bpp background / 4bpp background
 
 ## Planned
