@@ -2,7 +2,7 @@
 
 # Blender PSX Level export 
 
-Blender <= 2.79c plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
+Blender <= 2.79b plugin to export gouraud shaded, UV textured PSX meshes in a scene to a C file.
 
 ![3d scene](gif/3d.gif)
 ![pre-rendered BGs](gif/precalc.gif)
@@ -34,11 +34,11 @@ Real-time 3D / 8bpp background / 4bpp background
   * Basic Spatial partitioning
   * Portal based camera angle switch
   * 3D sprite
+  * VRam auto layout for TIMs
 
 ## Planned
 
   * Fix and improve all the things !
-  * VRam auto layout for TIMs
   * Wall collisions
 
 Specifically, it generates a C file containing for each mesh in the scene:
@@ -64,28 +64,28 @@ A few usefull stuff for manipulating the mesh :
   
 ```c
 typedef struct MESH {  
-	TMESH   *    tmesh;
-	PRIM    *    index;
-	TIM_IMAGE *  tim;  
-	unsigned long * tim_data;
-	MATRIX  *    mat;
-	VECTOR  *    pos;
-	SVECTOR *    rot;
-	short   *    isRigidBody;
-	short   *    isStaticBody;
-	short   *    isPrism;
-	short   *    isAnim;
-	short   *    isActor;
-	short   *    isLevel;
-	short   *    isBG;
-	short   *    isSprite;
-	long    *    p;
-	long    *    OTz;
-	BODY    *    body;
-	VANIM   *    anim;
-	struct NODE   *    node;
-	VECTOR       pos2D;
-	} MESH;
+    TMESH   *    tmesh;
+    PRIM    *    index;
+    TIM_IMAGE *  tim;  
+    unsigned long * tim_data;
+    MATRIX  *    mat;
+    VECTOR  *    pos;
+    SVECTOR *    rot;
+    short   *    isRigidBody;
+    short   *    isStaticBody;
+    short   *    isPrism;
+    short   *    isAnim;
+    short   *    isActor;
+    short   *    isLevel;
+    short   *    isBG;
+    short   *    isSprite;
+    long    *    p;
+    long    *    OTz;
+    BODY    *    body;
+    VANIM   *    anim;
+    struct NODE   *    node;
+    VECTOR       pos2D;
+    } MESH;
 
 ```
 
@@ -105,17 +105,27 @@ typedef struct {
 
 # Install the plugin
 
-Just `git clone` this repo in the addons folder of blender 2.79 :
+**This plugin is not compatible with Blender > 2.79.**
+
+1. Download and install Blender 2.79b.
+
+http://download.blender.org/release/Blender2.79/
+
+2. Clone this repository in the [addons folder](https://docs.blender.org/manual/en/latest/advanced/blender_directory_layout.html) of blender 2.79 :
+
+```bash
+git clone https://github.com/ABelliqueux/blender_io_export_psx_mesh.git
+```
 
 You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.
 
-Windows executables are provided for convenience.
+Windows executables are provided for convenience in this repo.
 
-For users with Imagemagick installed, there is an option to use that instead of pngquant.
+For users with Imagemagick installed, there is an option when exporting to use that instead of pngquant.
 
-On Linux, that's :
-
-`~/.config/blender/2.79/scripts/addons`
+On Linux : `~/.config/blender/2.79/scripts/addons`
+On macOS : `./Blender.app/Contents/Resources/2.79/addons`
+On Windows : `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.93\`
 
 # Steps to convert your mesh
 
@@ -131,8 +141,8 @@ E.g : You use a 'cube.png' file in blender, the psx code will look for a 'cube.t
   * If needed, edit the `primdraw.c` file , lines 29 and 30,  to reflect the number of tris you want to be able to draw ( Max seems to be ~750 in NTSC, ~910 in PAL )
   
 ```c
-#define OT_LENGTH	2048	// Maximum number of OT entries
-#define MAX_PRIMS	1024	// Maximum number of POLY_GT3 primitives
+#define OT_LENGTH   2048    // Maximum number of OT entries
+#define MAX_PRIMS   1024    // Maximum number of POLY_GT3 primitives
 ```
 seem to be safe values.
 
