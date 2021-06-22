@@ -7,6 +7,8 @@ It allows exporting a gouraud shaded, UV textured Blender scene to a format comp
 
 ![3d scene](gif/demo.gif)
 
+[Check the Wiki](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki) for in-depth informations.
+
 ## Features
 
 **Be warned this is WIP** !
@@ -19,24 +21,14 @@ It allows exporting a gouraud shaded, UV textured Blender scene to a format comp
   * Export vertex animations
   * Export up to 3 light sources
   * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
+  * VRam auto layout for TIMs
 
 ![comparison](gif/rt-8b-4b.gif)  
 Real-time 3D / 8bpp background / 4bpp background
-  
-### "Engine"
-
-  * Very basic physics / collision detection
-  * Constrained camera trajectory
-  * Orbital camera mode
-  * Basic Spatial partitioning
-  * Portal based camera angle switch
-  * 3D sprite
-  * VRam auto layout for TIMs
 
 ## Planned
 
   * Fix and improve all the things !
-  * Wall collisions
 
 # Install the plugin
 
