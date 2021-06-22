@@ -3,13 +3,9 @@
 # Blender 3dcam PSX engine Level exporter
 
 This Blender plugin is to be used in conjunction with the [3dcam PSX engine](https://github.com/ABelliqueux/3dcam-headers).  
-It allows exporting a gouraud shaded, UV textured Blender scene to a format compatible with the aforementionned engine.
+It allows exporting a gouraud shaded, UV textured Blender scene to a format compatible with the aforementionned engine.  
 
-![3d scene](gif/3d.gif)
-![pre-rendered BGs](gif/precalc.gif)
-![Push things](gif/push.gif)
-![Sprite](gif/sprite.gif)
-![Vertex animation](gif/vertexanim.gif)
+![3d scene](gif/demo.gif)
 
 ## Features
 
@@ -64,19 +60,9 @@ On Linux : `~/.config/blender/2.79/scripts/addons`
 On macOS : `./Blender.app/Contents/Resources/2.79/addons`  
 On Windows : `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.93\`  
 
-# Compiling
+# Install the 3D engine
 
-**TODO: Update these instructions**
-
-The provided `Makefile`  uses the [Nugget+PsyQ setup](https://github.com/ABelliqueux/nolibgs_hello_worlds#setting-up-the-sdk--modern-gcc--psyq-aka-nuggetpsyq).
-
-  1. Clone this repo in `(...)/pcsx-redux/src/mips/`
-  2. Enter the `blender_io_export_psx_mesh` folder
-  3. Install the plugin in blender, then open `level.blend`
-  4. Export as 'level.c'
-  5. Type `Make`
-
-You can use [img2tim](https://github.com/Lameguy64/img2tim) to convert your blender texture in a tim file.
+Head over to the [3dcam repo](https://github.com/ABelliqueux/3dcam-headers) and follow the setup instructions there.
 
 # Credits
 
