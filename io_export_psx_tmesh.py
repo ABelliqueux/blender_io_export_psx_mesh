@@ -647,6 +647,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         workFolder = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
         
+        if workFolder == "":
+            
+            workFolder = os.getcwd()
+        
         # Get export directory path
         
         filepath = bpy.data.filepath
@@ -657,6 +661,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
         expFolder = os.path.dirname(bpy.path.abspath(filepath))
         
+        # If the file wasn't saved before, expFolder will be empty. Default to current directory in that case
+        
+        if expFolder == "":
+            
+            expFolder = os.getcwd()
+            
         # Get texture folder, default to ./TEX
         
         textureFolder = os.path.join( workFolder, "TEX")
@@ -777,7 +787,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
         filepath = self.filepath
         
-        filepath = filepath.replace(self.filename_ext, "")	# Quick fix to get around the aforementioned 'bugfix'
+        filepath = filepath.replace(self.filename_ext, "")  # Quick fix to get around the aforementioned 'bugfix'
         
         # TODO : add option to export scenes as levels
         
@@ -1662,32 +1672,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         # ~ "\tNULL\n" + 
                        
                         "\t};\n\n")
-                
-                # ~ level_symbols.append( "MATRIX  " + fileName + "_model"+cleanName+"_matrix" )
-                       
-                # ~ level_symbols.append( "VECTOR  " + fileName + "_model"+cleanName+"_pos" )
-                       
-                # ~ level_symbols.append( "SVECTOR  " + fileName + "_model"+cleanName+"_rot" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isRigidBody" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isStaticBody" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isPrism" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isAnim" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isActor" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isLevel" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isBG" )
-                       
-                # ~ level_symbols.append( "short  " + fileName + "_model"+cleanName+"_isSprite" )
-                       
-                # ~ level_symbols.append( "long  " + fileName + "_model"+cleanName+"_p" ) 
-                       
-                # ~ level_symbols.append( "long  " + fileName + "_model"+cleanName+"_OTz" )
                        
                 level_symbols.append( "BODY  " + fileName + "_model"+cleanName+"_body" )
                 
@@ -1705,7 +1689,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # ~ level_symbols.append( "model" + cleanName + "_normal" )
                 
-                if len(m.uv_textures) != None:
+                if len(m.uv_textures) != 0:
                 
                     for t in range(len(m.uv_textures)):
                 
@@ -1821,7 +1805,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 f.write("\t" + fileName + "_model" + cleanName + "_index,\n")
                 
-                if len(m.uv_textures) != None:
+                if len(m.uv_textures) != 0:
                 
                     for t in range(len(m.uv_textures)):
                 
