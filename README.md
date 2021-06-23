@@ -57,6 +57,11 @@ On Windows : `%USERPROFILE%\AppData\Roaming\Blender Foundation\Blender\2.93\`
 
 Head over to the [3dcam repo](https://github.com/ABelliqueux/3dcam-headers) and follow the setup instructions there.
 
+# Export your scene !
+
+Open a working copy of your scene, add the needed [flags](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags) and export your level in the `3dcam-headers` folder.
+Following [those steps](https://github.com/ABelliqueux/3dcam-headers#compiling), you should now see your scene running on PSX !
+
 # Credits
 
 Based on the [code](https://pastebin.com/suU9DigB) provided by TheDukeOfZill, 04-2014, on http://www.psxdev.net/forum/viewtopic.php?f=64&t=537#p4088  
