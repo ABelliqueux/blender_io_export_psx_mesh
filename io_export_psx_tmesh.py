@@ -1006,7 +1006,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # LEVEL
         
         h.write("typedef struct LEVEL {\n" + 
-                "\tMATRIX * BGc;\n" + 
+                "\tCVECTOR * BGc;\n" + 
                 "\tMATRIX * cmat;\n" + 
                 "\tMATRIX * lgtmat;\n" +
                 "\tMESH   ** meshes;\n" +
