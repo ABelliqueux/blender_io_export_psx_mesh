@@ -123,9 +123,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     
     exp_expMode = BoolProperty(
 
-        name="Use blender file name",
+        name="Use blend file directory for export",
 
-        description="By default, files are exported as 'level*' in a folder named 'levels'. Enable to use the blender file name.",
+        description="Files will be exported in the same folder as the blend file.",
 
         default=False,
 
@@ -653,19 +653,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         # Get working directory path
         
-        workFolder = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
+        # ~ workFolder = os.path.dirname(bpy.path.abspath(bpy.data.filepath))
         
-        if workFolder == "":
+        # ~ if workFolder == "":
             
-            workFolder = os.getcwd()
+            # ~ workFolder = os.getcwd()
         
         # Get export directory path
         
-        filepath = bpy.data.filepath
+        filepath = self.filepath
         
         if self.exp_expMode:
             
-            filepath = self.filepath
+            filepath = bpy.data.filepath
             
         expFolder = os.path.dirname(bpy.path.abspath(filepath))
         
@@ -677,7 +677,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
         # Get texture folder, default to ./TEX
         
-        textureFolder = os.path.join( workFolder, "TEX")
+        textureFolder = os.path.join( expFolder, "TEX")
         
         if self.exp_CustomTexFolder != "TEX":
             
