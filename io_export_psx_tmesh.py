@@ -522,7 +522,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
             # Sets nextTpage, freeTpage, tpageY, nextClutSlot, freeClutSlot to next free space in Vram
             
-            
             # Transpose bpp to bitshift value
 
             global nextTpage, freeTpage
@@ -594,6 +593,15 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             
                 freeClutSlot -= 1
         
+        def linearToRGB(component):
+            # Convert linear Color in range 0.0-1.0 to range 0-255
+            # https://www.color.org/bgsrgb.pdf
+            a = 0.055
+            if component <= 0.0031308:
+                linear = component * 12.92
+            else:
+                linear = ( 1 + a ) * pow( component, 1 / 2.4 ) - a
+            return linear
         
         # Set rendering resolution to 320x240
     
@@ -998,6 +1006,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # LEVEL
         
         h.write("typedef struct LEVEL {\n" + 
+                "\tMATRIX * BGc;\n" + 
                 "\tMATRIX * cmat;\n" + 
                 "\tMATRIX * lgtmat;\n" +
                 "\tMESH   ** meshes;\n" +
@@ -1032,6 +1041,18 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 )
                 
+    ## Horizon color
+    
+        # Get first world horizon colors R, G and B, rounded:
+        BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 255 ) )
+        BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 255) )
+        BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 255 ) )
+        
+        f.write(
+                "CVECTOR " + fileName + "_BGc = { " + BGr + ", " + BGg + ", " + BGb + ", 0 };\n\n"
+                )
+        level_symbols.append( "CVECTOR " + fileName + "_BGc;" )
+        
     ## Camera setup
 
         # List of points defining the camera path
@@ -2707,6 +2728,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             "LEVEL " + fileName + " = {\n" +
     
+            "\t&" + fileName + "_BGc,\n" +
+            
             "\t&" + fileName + "_cmat,\n" +
             
             "\t&" + fileName + "_lgtmat,\n" +
@@ -2729,7 +2752,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
             "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
                 
-            "\t&" + fileName + "_meshPlan\n" +
+            # ~ "\t&" + fileName + "_meshPlan\n" +
             
             "};\n\n")
 
