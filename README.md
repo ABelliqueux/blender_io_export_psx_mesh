@@ -7,6 +7,8 @@ It allows exporting a gouraud shaded, UV textured Blender scene to a format comp
 
 ![3d scene](https://wiki.arthus.net/assets/demo.gif)
 
+## Documentation
+
 [Check the Wiki](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki) for in-depth informations.
 
 ## Features
