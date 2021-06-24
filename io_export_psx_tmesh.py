@@ -1008,6 +1008,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
         h.write("typedef struct LEVEL {\n" + 
                 "\tCVECTOR * BGc;\n" + 
+                "\tVECTOR * BKc;\n" + 
                 "\tMATRIX * cmat;\n" + 
                 "\tMATRIX * lgtmat;\n" +
                 "\tMESH   ** meshes;\n" +
@@ -1042,9 +1043,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 )
                 
-    ## Horizon color
+    ## Horizon & Ambient color
     
-        # Get first world horizon colors R, G and B, rounded:
+        # Get world horizon colors
         BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 255 ) )
         BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 255) )
         BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 255 ) )
@@ -1052,7 +1053,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         f.write(
                 "CVECTOR " + fileName + "_BGc = { " + BGr + ", " + BGg + ", " + BGb + ", 0 };\n\n"
                 )
-        level_symbols.append( "CVECTOR " + fileName + "_BGc;" )
+        level_symbols.append( "CVECTOR " + fileName + "_BGc" )
+        
+        # Get ambient color
+        BKr = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.r )  * 255 ) )
+        BKg = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.g )  * 255) )
+        BKb = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.b )  * 255 ) )
+        
+        f.write(
+                "VECTOR " + fileName + "_BKc = { " + BKr + ", " + BKg + ", " + BKb + ", 0 };\n\n"
+                )
+        level_symbols.append( "VECTOR " + fileName + "_BKc" )
         
     ## Camera setup
 
@@ -2738,6 +2749,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "LEVEL " + fileName + " = {\n" +
     
             "\t&" + fileName + "_BGc,\n" +
+            
+            "\t&" + fileName + "_BKc,\n" +
             
             "\t&" + fileName + "_cmat,\n" +
             
