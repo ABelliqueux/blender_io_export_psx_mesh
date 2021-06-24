@@ -929,6 +929,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tSVECTOR     rot;\n" +
                 "\tshort       isRigidBody;\n" +
                 "\tshort       isStaticBody;\n" +
+                "\tshort       isRound;\n" +
                 "\tshort       isPrism;\n" +
                 "\tshort       isAnim;\n" +
                 "\tshort       isActor;\n" +
@@ -1495,6 +1496,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 # Get object's custom properties
                 
+                # Set defaults values
+                
                 chkProp = {
            
                     'isAnim':0,
@@ -1502,6 +1505,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     'isRigidBody':0,
            
                     'isStaticBody':0,
+                    
+                    'isRound':0,
            
                     'isPrism':0,
            
@@ -1520,6 +1525,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     'lerp': 0
            
                 }
+                
+                # Get real values from object
                 
                 for prop in chkProp:
             
@@ -1869,21 +1876,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                              + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "},\n" +
                        
-                        "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ",\n" +
+                        "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ", // isRigidBody\n" +
                        
-                        "\t" + str(int(chkProp['isStaticBody'])) + ",\n" +
+                        "\t" + str(int(chkProp['isStaticBody'])) + ", // isStaticBody\n" +
+                        
+                        "\t" + str(int(chkProp['isRound'])) + ", // isRound \n" +
                        
-                        "\t" + str(int(chkProp['isPrism'])) + ",\n" +
+                        "\t" + str(int(chkProp['isPrism'])) + ", // isPrism\n" +
                        
-                        "\t" + str(int(chkProp['isAnim'])) + ",\n" +
+                        "\t" + str(int(chkProp['isAnim'])) + ", // isAnim\n" +
                        
-                        "\t" + str(int(chkProp['isActor'])) + ",\n" +
+                        "\t" + str(int(chkProp['isActor'])) + ", // isActor\n" +
                        
-                        "\t" + str(int(chkProp['isLevel'])) + ",\n" +
+                        "\t" + str(int(chkProp['isLevel'])) + ", // isLevel\n" +
                        
-                        "\t" + str(int(chkProp['isBG'])) + ",\n" +
+                        "\t" + str(int(chkProp['isBG'])) + ", // isBG\n" +
                        
-                        "\t" + str(int(chkProp['isSprite'])) + ",\n" +
+                        "\t" + str(int(chkProp['isSprite'])) + ",// isSprite\n" +
                        
                         "\t0,\n" +
                        
