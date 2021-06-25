@@ -736,6 +736,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Find default cam, and cameras in camPath
             
             for o in bpy.data.objects:
+                
+                # If orphan, ignore
+                if o.users == 0:
+                    continue
 
                 if o.type == 'CAMERA' and o.data.get('isDefault'):
 
@@ -1263,6 +1267,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             LCM = []
         
             for l in bpy.data.lamps:
+                
+                # If orphan, get on with it
+                if l.users == 0:
+                    continue
         
                 LCM.append( str( int( l.color.r * 4096 ) if l.color.r else 0 ) )
         
@@ -1303,6 +1311,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         timList = []
         
         for m in bpy.data.meshes:
+            
+            # If orphan, ignore
+            if m.users == 0:
+                continue
  
             if not m.get('isPortal') :
                 
@@ -2331,6 +2343,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Planes first
         
         for o in bpy.data.objects:
+        
+            # If orphan, ignore
+            if o.users == 0:
+                continue
         
             # Only loop through meshes
         
