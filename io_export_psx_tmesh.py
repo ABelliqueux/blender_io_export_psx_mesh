@@ -633,12 +633,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         
             TIMshift = 2
         
+        # Set context area to 3d view
+        previousAreaType = bpy.context.area.type
+        bpy.context.area.type="VIEW_3D"
         # Leave edit mode to avoid errors
-
         bpy.ops.object.mode_set(mode='OBJECT')
-
         # If set, triangulate objects of type mesh 
-
         if self.exp_Triangulate:
 
             for o in range(len(bpy.data.objects)):
@@ -2855,6 +2855,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             h.write( "extern " + symbol + ";\n\n")
         
         h.close()
+        
+        # Restore previous area type
+        bpy.context.area.type = previousAreaType
         
         return {'FINISHED'};
  
