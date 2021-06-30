@@ -924,6 +924,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # MESH
         
         h.write("typedef struct MESH {  \n"+
+                "\tint      totalVerts;\n" + 
                 "\tTMESH   *    tmesh;\n" +
                 "\tPRIM    *    index;\n" +
                 "\tTIM_IMAGE *  tim;  \n" + 
@@ -1024,7 +1025,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCAMPATH * camPath;\n" +
                 "\tCAMANGLE ** camAngles;\n" +
                 "\tNODE * curNode;\n" +
-                "\tMESH * meshPlan; // This one is temporary\n" +
                 "\t} LEVEL;\n")
 
         h.close()
@@ -1489,7 +1489,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                 f.write("};\n\n")
                 
-                # Write polygons index + type
+                # Write polygons index + type 
+                
+                # Keep track of total number of vertices in the mesh
+                totalVerts = 0
                 
                 f.write( "PRIM " + fileName + "_model" + cleanName + "_index[] = {\n" )
                 
@@ -1501,10 +1504,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
                     f.write( "\t" + str( poly.vertices[ 0 ] ) + "," + str( poly.vertices[ 1 ] ) + "," + str( poly.vertices[ 2 ] ) )
                     
+                    totalVerts += 3
+                    
                     if len(poly.vertices) > 3:
                 
                         f.write("," + str(poly.vertices[3]) + ",8")
-                
+                        
+                        totalVerts += 1
+                        
                     else:
                 
                         f.write(",0,4")
@@ -1850,11 +1857,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 
                 # ~ f.write("NODE_DECLARATION\n")
 
-                f.write( "MESH " + fileName + "_mesh" + cleanName + " = {\n" )
+                f.write( "MESH " + fileName + "_mesh" + cleanName + " = {\n" +
+                         
+                         "\t" + str(totalVerts) + ",\n" +
                 
-                f.write("\t&" + fileName + "_model"+ cleanName +",\n")
+                         "\t&" + fileName + "_model"+ cleanName +",\n" +
                 
-                f.write("\t" + fileName + "_model" + cleanName + "_index,\n")
+                         "\t" + fileName + "_model" + cleanName + "_index,\n"
+                         )
                 
                 if len(m.uv_textures) != 0:
                 
@@ -1897,7 +1907,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                              + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," 
                         
-                             + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "},\n" +
+                             + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0},\n" +
                        
                         "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ", // isRigidBody\n" +
                        
@@ -1937,9 +1947,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                         "\t" + "subs_" + m.name + ",\n" +
                         
-                        "\t0" +
+                        "\t0,\n" +
                         
-                        "\n};\n\n"
+                        "};\n\n"
                         )
                                 
                 level_symbols.append( "MESH " + fileName + "_mesh" + cleanName )
@@ -2789,8 +2799,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "\t(CAMANGLE **)&" + fileName + "_camAngles,\n" +
                 
             "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
-                
-            # ~ "\t&" + fileName + "_meshPlan\n" +
             
             "};\n\n")
 
