@@ -1051,9 +1051,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     ## Horizon & Ambient color
     
         # Get world horizon colors
-        BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 192 ) + 64 )
-        BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 192) + 64 )
-        BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 192 ) + 64 )
+        BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 192 ) + 63 )
+        BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 192) + 63 )
+        BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 192 ) + 63 )
         
         f.write(
                 "CVECTOR " + fileName + "_BGc = { " + BGr + ", " + BGg + ", " + BGb + ", 0 };\n\n"
@@ -1061,9 +1061,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         level_symbols.append( "CVECTOR " + fileName + "_BGc" )
         
         # Get ambient color
-        BKr = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.r )  * 192 ) + 64 )
-        BKg = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.g )  * 192 ) + 64 )
-        BKb = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.b )  * 192 ) + 64 )
+        BKr = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.r )  * 192 ) + 63 )
+        BKg = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.g )  * 192 ) + 63 )
+        BKb = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.b )  * 192 ) + 63 )
         
         f.write(
                 "VECTOR " + fileName + "_BKc = { " + BKr + ", " + BKg + ", " + BKb + ", 0 };\n\n"
