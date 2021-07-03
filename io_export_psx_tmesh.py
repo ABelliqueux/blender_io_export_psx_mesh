@@ -932,6 +932,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tMATRIX      mat;\n" + 
                 "\tVECTOR      pos;\n" + 
                 "\tSVECTOR     rot;\n" +
+                "\tshort       isProp;\n" +
                 "\tshort       isRigidBody;\n" +
                 "\tshort       isStaticBody;\n" +
                 "\tshort       isRound;\n" +
@@ -1050,9 +1051,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     ## Horizon & Ambient color
     
         # Get world horizon colors
-        BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 255 ) )
-        BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 255) )
-        BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 255 ) )
+        BGr = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.r )  * 192 ) + 64 )
+        BGg = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.g )  * 192) + 64 )
+        BGb = str( round( linearToRGB( bpy.data.worlds[0].horizon_color.b )  * 192 ) + 64 )
         
         f.write(
                 "CVECTOR " + fileName + "_BGc = { " + BGr + ", " + BGg + ", " + BGb + ", 0 };\n\n"
@@ -1060,9 +1061,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         level_symbols.append( "CVECTOR " + fileName + "_BGc" )
         
         # Get ambient color
-        BKr = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.r )  * 255 ) )
-        BKg = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.g )  * 255) )
-        BKb = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.b )  * 255 ) )
+        BKr = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.r )  * 192 ) + 64 )
+        BKg = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.g )  * 192 ) + 64 )
+        BKb = str( round( linearToRGB( bpy.data.worlds[0].ambient_color.b )  * 192 ) + 64 )
         
         f.write(
                 "VECTOR " + fileName + "_BKc = { " + BKr + ", " + BKg + ", " + BKb + ", 0 };\n\n"
@@ -1532,6 +1533,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
            
                     'isAnim':0,
            
+                    'isProp':0,
+                    
                     'isRigidBody':0,
            
                     'isStaticBody':0,
@@ -1680,33 +1683,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # Write object matrix, rot and pos vectors
                 
                 f.write(
-                
-                        # ~ "MATRIX " + fileName + "_model"+cleanName+"_matrix = {0};\n" +
-                       
-                        # ~ "VECTOR " + fileName + "_model"+cleanName+"_pos    = {"+ str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0};\n" +
-                       
-                        # ~ "SVECTOR " + fileName + "_model"+cleanName+"_rot   = {"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + "};\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isRigidBody = " + str(int(chkProp['isRigidBody'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isStaticBody = " + str(int(chkProp['isStaticBody'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isPrism = " + str(int(chkProp['isPrism'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isAnim = " + str(int(chkProp['isAnim'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isActor = " + str(int(chkProp['isActor'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isLevel = " + str(int(chkProp['isLevel'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isBG = " + str(int(chkProp['isBG'])) + ";\n" +
-                       
-                        # ~ "short " + fileName + "_model"+cleanName+"_isSprite = " + str(int(chkProp['isSprite'])) + ";\n" +
-                       
-                        # ~ "long " + fileName + "_model"+cleanName+"_p = 0;\n" +
-                       
-                        # ~ "long " + fileName + "_model"+cleanName+"_OTz = 0;\n" +
-                       
                         "BODY " + fileName + "_model"+cleanName+"_body = {\n" +
                        
                         "\t{0, 0, 0, 0},\n" +
@@ -1909,6 +1885,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         
                              + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0},\n" +
                        
+                        "\t" + str( int( chkProp[ 'isProp' ] ) ) + ", // isProp\n" +
+                        
                         "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ", // isRigidBody\n" +
                        
                         "\t" + str(int(chkProp['isStaticBody'])) + ", // isStaticBody\n" +
