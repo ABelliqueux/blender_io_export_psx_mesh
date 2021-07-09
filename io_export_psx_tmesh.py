@@ -1351,7 +1351,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             
                                "," + str( round( -v.z * scale ) ) +
                               
-                               "," + str( round(  v.y * scale ) ) + " }" )
+                               "," + str( round(  v.y * scale ) ) + ",0 }" )
                     
                     if i != len(m.vertices) - 1:
              
