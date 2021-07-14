@@ -1551,7 +1551,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
            
                     'isSprite':0,
            
-                    'mass': 1,
+                    'mass': 10,
            
                     'restitution': 0,
            
