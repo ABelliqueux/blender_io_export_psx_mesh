@@ -30,6 +30,7 @@ Real-time 3D / 8bpp background / 4bpp background
 
 ## Planned
 
+  * Sound
   * Fix and improve all the things !
 
 # Install the plugin
@@ -63,6 +64,12 @@ Head over to the [3dcam repo](https://github.com/ABelliqueux/3dcam-headers) and 
 
 Open a working copy of your scene, add the needed [flags](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags) and export your level in the `3dcam-headers` folder.
 Following [those steps](https://github.com/ABelliqueux/3dcam-headers#compiling), you should now see your scene running on PSX !
+
+# Custom properties helper add-on
+
+A [small blender addon](https://github.com/ABelliqueux/blender_io_export_psx_mesh/blob/main/copy_custom_prop.py) is provided that facilitates copying [flags](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags) between several objects in your scene.  
+
+Once enabled, first select the objects you want to copy the flags to, then the object that has the flags you want copied, then access the functionality via the `Object` menu in the 3D viewport, or use the `Shift+P` keyboard shortcut.
 
 # Credits
 
