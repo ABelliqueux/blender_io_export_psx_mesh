@@ -67,9 +67,15 @@ Following [those steps](https://github.com/ABelliqueux/3dcam-headers#compiling),
 
 # Custom properties helper add-on
 
-A [small blender addon](https://github.com/ABelliqueux/blender_io_export_psx_mesh/blob/main/copy_custom_prop.py) is provided that facilitates copying [flags](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags) between several objects in your scene.  
+## 3dcam-helper
 
-Once enabled, first select the objects you want to copy the flags to, then the object that has the flags you want copied, then access the functionality via the `Object` menu in the 3D viewport, or use the `Shift+P` keyboard shortcut.
+A [small blender addon](https://github.com/ABelliqueux/blender_io_export_psx_mesh/blob/main/3dcam-engine-helper.py) is provided that facilitates setting and copying [flags](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags) between several objects in your scene.
+
+![Setting an object's flags](https://wiki.arthus.net/assets/3dcam-helper-flags.gif)  
+
+See [the documentation](https://github.com/ABelliqueux/blender_io_export_psx_mesh/wiki/Flags#3dcam-helper) for usage instruction.
+
+**The script only does the job of creating/updating the object's custom properties, so it is not mandatory to use it.**
 
 # Credits
 
