@@ -76,8 +76,6 @@ def updateCustomProps(self, context):
 def selection_callback(scene):
     global last_selection
     global store_att_names
-    print("1 " + str(last_selection))
-    print("2 " + str(bpy.context.active_object))
     if bpy.context.active_object != last_selection:
         last_selection = bpy.context.active_object
         for groupName, attributeDefinitions in bpy.propertyGroupLayouts.items():
