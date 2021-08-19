@@ -90,7 +90,6 @@ def selection_callback(scene):
                     if attName in last_selection.data:
                         value = last_selection.data[attName]
                 if attType == 'boolean':
-                    print(attName + ":" + str(value))
                     attributes[attName] = BoolProperty(name=attName, default=value, update=updateCustomProps )
                 elif attType == 'int':
                     attributes[attName] = IntProperty(name=attName, default=value, update=updateCustomProps)
