@@ -79,6 +79,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         description = "By default, the script looks for / saves textures in the ./TEX folder. You can tell it to use a different folder.",
         default="TEX"
         )
+    exp_XAmode = IntProperty(
+        name="XA mode",
+        description ="XA sector size : 0 = 2352, 1=2336",
+        min=0, max=1,
+        default=1
+        )
+    exp_isoCfg = StringProperty(
+        name="mkpsxiso config folder",
+        description = "Where should we look for mkpsxiso's config file ?",
+        default= "." + os.sep + "config" + os.sep + "3dcam.xml"
+    )
     def execute(self, context):
     ### Globals declaration
         global nextTpage, freeTpage
@@ -86,7 +97,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         global tpageY
         global TIMbpp
         global timFolder
+        XAmode = self.exp_XAmode
+        # Set Scale 
+        scale = self.exp_Scale
     ### Functions
+        def psxLoc(location, scale=scale):
+            return round(location * scale)
         def triangulate_object(obj): 
             # Triangulate an object's mesh
             # Source : https://blender.stackexchange.com/questions/45698/triangulate-mesh-in-python/45722#45722
@@ -330,6 +346,231 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             else:
                 linear = ( 1 + a ) * pow( component, 1 / 2.4 ) - a
             return linear
+        ### Sound conversion and export
+        class Sound:
+            def __init__(self, objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, index, XAfile=-1, XAchannel=-1, XAsize=-1, XAend=-1):
+                self.objName = objName
+                self.soundName = soundName
+                self.soundPath = soundPath
+                self.convertedSoundPath = convertedSoundPath
+                self.parent = parent
+                self.location = location
+                self.volume = volume
+                self.volume_min = volume_min
+                self.volume_max = volume_max
+                self.index = index
+                self.XAfile = XAfile
+                self.XAchannel = XAchannel
+                self.XAsize = XAsize
+                self.XAend = XAend
+            def __eq__(self, other):
+                return self.convertedSoundPath == other.convertedSoundPath
+
+        def sound2XA( soundPath, soundName, soundFolder="XA", bpp=4, XAfile=0, XAchannel=0 ):
+            # Convert sound file to XA
+            # exports in ./XA by default
+            # ffmpeg -i input.mp3 -acodec pcm_s16le -ac 2 -ar 44100 output.wav
+            # psxavenc -f 37800 -t xa -b 4 -c 2 -F 1 -C 0 "../hello_cdda/audio/beach.wav" "xa/beach.xa"
+            exe = ""
+            if os.name == 'nt':
+                exe = ".exe"
+            # find export folder
+            filepath = self.filepath
+            # ~ filepath = bpy.data.filepath
+            expFolder = os.path.dirname(bpy.path.abspath(filepath)) + os.sep + soundFolder + os.sep
+            # create if non-existent
+            if not os.path.exists(expFolder):
+                os.mkdir(expFolder)
+            # find file base name
+            basename = soundName.split('.')[0]
+            exportPath = expFolder + basename + ".xa"
+            # Convert to 16-B WAV
+            subprocess.call( [ "ffmpeg" + exe, "-i", soundPath, "-acodec", "pcm_s16le", "-ac", "2", "-ar", "44100", "-y", "/tmp/tmp.wav"] )
+            # Convert WAV to XA
+            subprocess.call( [ "psxavenc" + exe, "-f", "37800", "-t", "xa", "-b", str(bpp), "-c", "2", "-F", str(XAfile), "-C", str(XAchannel), "/tmp/tmp.wav", exportPath ] )
+            return exportPath
+
+        def XAmanifest(XAlist, soundFolder="XA", XAchannels=8):
+            # generate manifest file
+            # find export folder
+            filepath = self.filepath
+            expFolder = os.path.dirname(bpy.path.abspath(filepath)) + os.sep + soundFolder + os.sep
+            XAfiles = []
+            for file_index in range(len(XAlist)):
+                manifestFile = open(os.path.normpath(expFolder + "inter_" + str(file_index) + ".txt" ), "w+")
+                # ~ print("\nFile_" + str(file_index) + " :")
+                lines = XAchannels
+                for xa in XAlist[file_index]:
+                    manifestFile.write( str(XAmode) + " xa " + xa.convertedSoundPath + " " + str(xa.XAfile) + " " + str(xa.XAchannel) + "\n" )
+                    lines -= 1
+                while lines:
+                    manifestFile.write( str(XAmode) + " null\n")
+                    lines -= 1
+                manifestFile.close()
+        
+        def writeIsoCfg(configFile, insertString):
+            # Write insertString one line above searchString
+            print(configFile)
+            print(insertString)
+            searchString = "<dummy sectors"
+            if os.path.exists(configFile):
+                with open(configFile,"r+") as fd:
+                    content = fd.readlines()
+                    for index, line in enumerate(content):
+                        if insertString in content[index]:
+                            break
+                        if searchString in line and insertString not in content[index] and insertString not in content[index-1]:
+                            content.insert(index, insertString)
+                            break
+                    fd.seek(0)
+                    fd.writelines(content)
+            else:
+                print("No mkpsxiso config file were found.")
+                    
+        def addXAtoISO(XAinterList, configFile, soundFolder="XA"):
+            # Add XA file to mkpsxiso config file if it existsd
+            filepath = self.filepath
+            expFolder = os.path.dirname(bpy.path.abspath(filepath)) + os.sep + soundFolder + os.sep
+            for xa in range(len(XAlist)):
+                XAfilePath = expFolder + "inter_" + str(xa) + ".xa"
+                insertString = '\t\t\t<file name="INTER_' + str(xa) + '.XA" type="xa" source="' + XAfilePath + '"/>\n'
+                writeIsoCfg(configFile, insertString)
+                
+        def XAinterleave(XAlist, soundFolder="XA"):
+            # Generate interleaved XA files from existing XA files referenced in soundFiles
+            exe = ""
+            if os.name == 'nt':
+                exe = ".exe"
+            # find export folder
+            filepath = self.filepath
+            for xa in range(len(XAlist)):
+                manifestFile = expFolder + "inter_" + str(xa) + ".txt"
+                outputFile = expFolder + "inter_" + str(xa) + ".xa"
+                subprocess.call( [ "xainterleave" + exe, str(XAmode), manifestFile, outputFile ])
+        
+        def sound2VAG( soundPath, soundName, soundFolder="VAG"):
+            # Convert sound file to VAG
+            # exports in ./VAG by default
+            # For windows users, add '.exe' to the command
+            exe = ""
+            if os.name == 'nt':
+                exe = ".exe"
+            # find export folder
+            filepath = self.filepath
+            # ~ filepath = bpy.data.filepath
+            expFolder = os.path.dirname(bpy.path.abspath(filepath)) + os.sep + soundFolder + os.sep
+            # create if non-existent
+            if not os.path.exists(expFolder):
+                os.mkdir(expFolder)    
+            # find file base name
+            basename = soundName.split('.')[0]
+            exportPath = expFolder + basename + ".vag"
+            # Convert to RAW WAV data
+            subprocess.call( [ "ffmpeg" + exe, "-i", soundPath, "-f", "s16le", "-ac", "1", "-ar", "44100", "-y", "/tmp/tmp.dat"] )
+            # Convert WAV to VAG
+            subprocess.call( [ "wav2vag" + exe, "/tmp/tmp.dat", exportPath, "-sraw16", "-freq=44100" ] )
+            return exportPath
+            
+        def writeExtList(f, soundName, level_symbols):
+            soundName = soundName.split('.')[0]
+            f.write("extern u_char _binary_VAG_" + soundName + "_vag_start;\n")
+            
+        def writeVAGbank(f, soundList, level_symbols):
+            index = 0
+            SPU = 0
+            dups = []
+            for file_index in range(len(soundList)):
+                if soundList[file_index].XAsize == -1 :
+                    if soundList[file_index] not in dups:
+                        writeExtList(f, soundList[file_index].soundName, level_symbols)
+                        dups.append(soundList[file_index])
+                    index += 1
+            f.write("\nVAGbank " + fileName + "_VAGBank = {\n" +
+                    "\t" + str(index) + ",\n" +
+                    "\t{\n")
+            for sound in soundList:
+                if sound.XAsize == -1:
+                    f.write("\t\t{ &_binary_VAG_" + sound.soundName.split('.')[0] + "_vag_start, SPU_0" + str(SPU) + "CH, 0 }")
+                    if SPU < index - 1:
+                        f.write(",\n")
+                    sound.index = SPU
+                    SPU += 1
+            f.write("\n\t}\n};\n\n" )
+            level_symbols.append("VAGbank " + fileName + "_VAGBank")
+            # If SPU, we're using VAGs
+            return SPU
+                
+            
+        def writeXAbank(f, XAfiles, level_symbols):
+            index = 0
+            XAinter = []
+            # ~ soundName = objName.split('.')[0]
+            for file_index in range(len(XAfiles)):
+                if XAfiles[file_index].XAsize != -1:
+                    index += 1
+                    if XAfiles[file_index].XAfile not in range( len( XAinter ) ) :
+                        XAinter.append( list() )
+                    XAinter[ XAfiles[file_index].XAfile ].append(XAfiles[file_index])
+            for XAlistIndex in range(len(XAinter)):
+                f.write("XAbank " + fileName + "_XABank_" + str(XAlistIndex) + " = {\n" + 
+                        "\t\"\\\\INTER_" + str(XAlistIndex) + ".XA;1\",\n" +
+                        "\t" + str(len(XAinter[XAlistIndex])) + ",\n" +
+                        "\t0,\n" + 
+                        "\t{\n") 
+                index = 0
+                for sound in XAinter[XAlistIndex]:
+                    if sound.XAsize != -1:
+                        f.write( "\t\t{ " + str(index) + ", " + str(sound.XAsize) + ", " + str(sound.XAfile) + ", " + str(sound.XAchannel) + ", 0, " + str(sound.XAend) + " * XA_CHANNELS, -1 },\n" )
+                        sound.index = index
+                        index += 1
+                f.write( "\t}\n};\n" )
+                level_symbols.append("XAbank "  + fileName + "_XABank_" + str(XAlistIndex))
+            return XAinter
+        
+        def writeXAfiles(f, XAlist, fileName):
+            # Write XAFiles struct
+            f.write("XAfiles " + fileName + "_XAFiles = {\n" +
+                "\t" + str(len(XAlist)) + ",\n" +
+                "\t{\n")
+            if XAlist:
+                for xa in range(len(XAlist)):
+                    f.write("\t\t&" + fileName + "_XABank_" +  str(xa))
+                    if xa < len(XAlist) - 1:
+                        f.write(",")
+            else:
+                f.write("\t\t0")
+            f.write("\n\t}\n};\n")
+            level_symbols.append("XAfiles " + fileName + "_XAFiles")
+        def writeSoundObj(f, soundFiles, level_symbols):
+            index = 0
+            # Write SOUND_OBJECT structures
+            for obj in soundFiles:
+                f.write("SOUND_OBJECT " + fileName + "_" + obj.objName.replace(".", "_") + " = {\n" +
+                        "\t{" + str(psxLoc(obj.location.x)) + "," + str(psxLoc(obj.location.y)) + "," + str(psxLoc(obj.location.z)) + "},\n" +
+                        "\t" + str(obj.volume * 0x3fff) + ", " + str(obj.volume_min * 0x3fff) + ", " + str(obj.volume_max * 0x3fff) + ",\n" )
+                if obj.XAsize == -1 :
+                    f.write("\t&" + fileName + "_VAGBank.samples[" + str(obj.index) + "],\n" +
+                            "\t0,\n")
+                else:
+                    f.write("\t0,\n" + 
+                            "\t&" + fileName + "_XABank_" + str(obj.XAfile) + ".samples[" + str(obj.index) + "],\n")
+                if obj.parent:
+                    f.write( "\t&" + fileName + "_mesh" + CleanName(obj.parent.name) + "\n")
+                else:
+                    f.write("\t0\n")
+                f.write("};\n\n")
+                index += 1
+                level_symbols.append("SOUND_OBJECT " + fileName + "_" + obj.objName.replace(".", "_"))
+            f.write("LEVEL_SOUNDS " + fileName + "_sounds = {\n" +
+                    "\t" + str(index) + ",\n" + 
+                    "\t{\n")
+            for obj in range(len(soundFiles)):
+                f.write( "\t\t&" + fileName + "_" + soundFiles[obj].objName.replace(".", "_"))
+                if obj < len(soundFiles) - 1 :
+                    f.write(",\n")
+            f.write("\n\t}\n};\n\n")
+            level_symbols.append("LEVEL_SOUNDS " + fileName + "_sounds")
+            return index
         # Set rendering resolution to 320x240
         bpy.context.scene.render.resolution_x = 320
         bpy.context.scene.render.resolution_y = 240
@@ -355,8 +596,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             for o in range(len(bpy.data.objects)):
                 if bpy.data.objects[o].type == 'MESH':
                     triangulate_object(bpy.data.objects[o])
-        # Set Scale 
-        scale = self.exp_Scale
         # Get export directory path
         filepath = self.filepath
         if self.exp_expMode:
@@ -478,6 +717,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "struct CHILDREN;\n" +
                 "struct NODE;\n" +
                 "struct QUAD;\n" +
+                "struct LEVEL;\n" +
+                "struct VAGsound;\n" +
+                "struct VAGbank;\n" +
+                "struct XAsound;\n" +
+                "struct XAbank;\n" +
+                "struct XAfiles;\n" +
+                "struct SOUND_OBJECT;\n" +
+                "struct LEVEL_SOUNDS;\n" +
                 "\n")
         # BODY
         h.write("typedef struct BODY {\n" +
@@ -581,6 +828,54 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCHILDREN * objects;\n" + 
                 "\tCHILDREN * rigidbodies;\n" + 
                 "\t} NODE;\n\n")
+        # SOUND
+        # VAG
+        h.write("//VAG\n" + 
+                "typedef struct VAGsound {\n" +
+                "\tu_char * VAGfile;        // Pointer to VAG data address\n" +
+                "\tu_long spu_channel;      // SPU voice to playback to\n" +
+                "\tu_long spu_address;      // SPU address for memory freeing spu mem\n" +
+                "\t} VAGsound;\n\n" )
+                
+        h.write("typedef struct VAGbank {\n" +
+                "\tu_int index;\n" +
+                "\tVAGsound samples[];\n" +
+                "\t} VAGbank;\n\n")
+
+        h.write("// XA\n" + 
+                "typedef struct XAsound {\n" +
+                "\tu_int id;\n" +
+                "\tu_int size;\n" +
+                "\tu_char file, channel;\n" +
+                "\tu_int start, end;\n" +
+                "\tint cursor;\n" +
+                "\t} XAsound;\n\n")
+
+        h.write("typedef struct XAbank {\n" +
+                "\tchar name[16];\n" +
+                "\tu_int index;\n" +
+                "\tint offset;\n" +
+                "\tXAsound samples[];\n" +
+                "\t} XAbank;\n\n")
+                
+        h.write("typedef struct XAfiles {\n" +
+                "\tu_int index;\n" +
+                "\tXAbank * banks[];\n" +
+                "\t} XAfiles;\n\n" )
+                
+        h.write("typedef struct SOUND_OBJECT {\n" +
+                "\tVECTOR location;\n" + 
+                "\tint volume, volume_min, volume_max;\n" +
+                "\tVAGsound * VAGsample;\n" +
+                "\tXAsound * XAsample;\n" + 
+                "\tMESH * parent;\n" +
+                "} SOUND_OBJECT;\n\n" )
+        
+        h.write("typedef struct LEVEL_SOUNDS {\n" +
+                "\tint index;\n" +
+                "\tSOUND_OBJECT * sounds[];\n" +
+                "} LEVEL_SOUNDS;\n\n")
+
         # LEVEL
         h.write("typedef struct LEVEL {\n" + 
                 "\tCVECTOR * BGc;\n" + 
@@ -596,6 +891,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tCAMPATH * camPath;\n" +
                 "\tCAMANGLE ** camAngles;\n" +
                 "\tNODE * curNode;\n" +
+                "\tLEVEL_SOUNDS * levelSounds;\n" +
+                "\tVAGbank * VAG;\n" +
+                "\tXAfiles * XA;\n" +
                 "\t} LEVEL;\n")
         h.close()
 ## Level Data (level.c)
@@ -1479,6 +1777,86 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         level_symbols.append( "MESH * " + fileName + "_propPtr" )
         level_symbols.append( "CAMANGLE * " + fileName + "_camPtr" )
         level_symbols.append( "NODE * " + fileName + "_curNode" )
+    ## Sound
+        # Build a dictionary of objects that have child SPEAKER objects
+        # These objects's positions will have to be updated
+        spkrParents = defaultdict(dict)
+        spkrOrphans = []
+        # array of Sound objects
+        soundFiles = []
+        # current XA files and channel
+        freeXAfile = 0
+        freeXAchannel = 0
+        for obj in bpy.data.objects:
+            # if obj is a speaker
+            if obj.type == 'SPEAKER':
+                if obj.data.sound is not None:
+                    # and child of a mesh
+                    if obj.parent is not None:
+                        if obj.parent.type == 'MESH':
+                            parent = obj.parent
+                            # if parent exists in parent list, append to child list
+                            # ~ if obj.parent.name in spkrParents:
+                                # ~ spkrParents[obj.parent.name].append(obj.name)
+                            # ~ else:
+                                # if parent does not exist in list yet, create array
+                                # ~ spkrParents[obj.parent.name] = [obj.name]
+                    # has no parent
+                    else:
+                        # ~ spkrOrphans.append(obj.name)
+                        parent = 0
+                    # get sound informations
+                    objName = obj.name
+                    soundName = obj.data.sound.name
+                    soundPath = bpy.path.abspath(obj.data.sound.filepath)
+                    location = obj.location
+                    volume = int(obj.data.volume)
+                    volume_min = int(obj.data.volume_min)
+                    volume_max = int(obj.data.volume_max)
+                    # convert sound
+                    if obj.data.get('isXA'):
+                        XAsectorsize = 2336 if XAmode else 2352
+                        if freeXAchannel > 7:
+                            freeXAfile += 1
+                            freeXAchannel = 0
+                        convertedSoundPath = sound2XA(soundPath, soundName, bpp=4, XAfile=freeXAfile, XAchannel=freeXAchannel)
+                        XAfile = freeXAfile
+                        XAchannel = freeXAchannel
+                        freeXAchannel += 1
+                        if os.path.exists(convertedSoundPath):
+                            XAsize =  os.path.getsize(convertedSoundPath)
+                            XAend = int((( XAsize / XAsectorsize ) - 1))
+                        else:
+                            XAsize = -1
+                            XAend = -1
+                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1, XAfile, XAchannel, XAsize, XAend ) )
+                    else:
+                        convertedSoundPath = sound2VAG(soundPath, soundName)
+                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1 ) )
+        # Default values
+        XAFiles = "0"
+        VAGBank = "0"
+        level_sounds = "0"
+        # If sound objects in scene
+        if soundFiles:
+            # Deal with VAGs
+            VAGBank = writeVAGbank(f, soundFiles, level_symbols)
+            if VAGBank and VAGBank != "0":
+                VAGBank = fileName + "_VAGBank"
+            # Deal with XA
+            XAlist = writeXAbank(f, soundFiles, level_symbols)
+            writeXAfiles(f, XAlist, fileName)
+            if XAlist:
+                XAmanifest(XAlist)
+                XAinterleave(XAlist)
+                # Update mkpsxiso config file if it exists
+                configFile = expFolder + os.sep + os.path.relpath(self.exp_isoCfg)
+                addXAtoISO(XAlist, configFile)
+                XAFiles = len(XAlist)
+            # Write Sound obj 
+            level_sounds = writeSoundObj(f, soundFiles, level_symbols)
+            if level_sounds and level_sounds != "0":
+                level_sounds = fileName + "_sounds"
         # Write LEVEL struct
         f.write(
             "LEVEL " + fileName + " = {\n" +
@@ -1495,7 +1873,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "\t&" + fileName + "_camPath,\n" +
             "\t(CAMANGLE **)&" + fileName + "_camAngles,\n" +
             "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
+            "\t&" + level_sounds + ",\n" +
+            "\t&" + VAGBank + ",\n" +
+            "\t&" + fileName + "_XAFiles\n" +
             "};\n\n")
+        # TODO : generate mkpsxiso config file
+        # 
         # Set default camera back in Blender
         if defaultCam != 'NULL':
             bpy.context.scene.camera = bpy.data.objects[ defaultCam ]
@@ -1528,8 +1911,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
 ## Level forward declarations (level.h)
         h = open(os.path.normpath(level_h),"w+")
         h.write( 
-                '#pragma once\n\n' +
-                '#include "../custom_types.h"\n\n'
+                '#pragma once\n' +
+                '#include "../custom_types.h"\n' +
+                '#include "../include/defines.h"\n\n'
                 )
         for symbol in level_symbols:
             h.write( "extern " + symbol + ";\n")

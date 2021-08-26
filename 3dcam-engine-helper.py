@@ -27,7 +27,8 @@ bpy.propertyGroupLayouts = {
             { "name": "isWall",      "type": "boolean" }, 
             { "name": "isBG",        "type": "boolean" }, 
             { "name": "isSprite",    "type": "boolean" }, 
-            { "name": "isLerp",      "type": "boolean" }
+            { "name": "isLerp",      "type": "boolean" },
+            { "name": "isXA",        "type": "boolean" }
         ],
     "Others": [
             { "name": "mass",        "type": "int" }
