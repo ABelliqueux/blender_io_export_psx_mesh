@@ -24,13 +24,13 @@ It allows exporting a gouraud shaded, UV textured Blender scene to a format comp
   * Export up to 3 light sources
   * Export pre-rendered backgrounds for in-game use (8bpp and 4bpp)
   * VRam auto layout for TIMs
+  * Export sound/music as VAG/XA files
 
 ![comparison](https://wiki.arthus.net/assets/rt-8b-4b.gif)  
 Real-time 3D / 8bpp background / 4bpp background
 
 ## Planned
 
-  * Sound
   * Fix and improve all the things !
 
 # Install the plugin
@@ -46,11 +46,23 @@ http://download.blender.org/release/Blender2.79/
 ```bash
 git clone https://github.com/ABelliqueux/blender_io_export_psx_mesh.git
 ```
-3. Enable the add-on in Blender by going to user preferences, Add-ons tab, and enable `Import-Export: PSX TMesh exporter`.  
 
-You'll need to have [pngquant](https://pngquant.org/) and [img2tim](https://github.com/Lameguy64/img2tim) utilities installed and in your path for PNG to TIM conversion.  
-Windows executables are provided for convenience in this repo.  
-For users with Imagemagick installed, there is an option when exporting to use that instead of pngquant.  
+3. Dependencies 
+
+Here are the dependencies you should have in your path :
+
+  * [pngquant](https://pngquant.org/) : convert image to 4/8bpp palettized  pngs
+  * [ffmpeg](https://ffmpeg.org/) : convert audio to WAV
+  * [img2tim](https://github.com/Lameguy64/img2tim) : convert image to psx TIM
+  * [wav2vag](https://github.com/ColdSauce/psxsdk/blob/master/tools/wav2vag.c) : convert WAV to psx VAG
+  * [psxavenc](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/psxavenc) : convert WAV to psx XA
+  * [xainterleave](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/xainterleave) : interleave psx XA files
+
+Windows executables are provided for convenience in this repo.
+
+For users with **Imagemagick** installed, there is an option when exporting to use that instead of pngquant.  
+
+4. Enable the add-on in Blender by going to user preferences, Add-ons tab, and enable `Import-Export: PSX TMesh exporter`.  
 
 On Linux : `~/.config/blender/2.79/scripts/addons`  
 On macOS : `./Blender.app/Contents/Resources/2.79/addons`  
