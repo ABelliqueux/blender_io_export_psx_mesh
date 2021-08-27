@@ -85,6 +85,7 @@ Building `psxavenc` and `xainterleave` :
 ```bash
 # Use the Makefile that's in candyk-psx's sources directory :
 make tools
+# bins will appear in 'candyk-psx/bin'
 ```
 
 For users with **Imagemagick** installed, there is an option when exporting to use that instead of pngquant.  
