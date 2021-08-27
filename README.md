@@ -49,16 +49,14 @@ git clone https://github.com/ABelliqueux/blender_io_export_psx_mesh.git
 
 3. Dependencies 
 
-Here are the dependencies you should have in your path :
+These utilities should be in your [$PATH](https://stackoverflow.com/questions/44272416/how-to-add-a-folder-to-path-environment-variable-in-windows-10-with-screensho#44272417) :
 
-  * [pngquant](https://pngquant.org/) : convert image to 4/8bpp palettized  pngs
+  * [pngquant](https://pngquant.org/) : convert image to 4/8bpp palettized pngs
   * [ffmpeg](https://ffmpeg.org/) : convert audio to WAV
-  * [img2tim](https://github.com/Lameguy64/img2tim) : convert image to psx TIM
-  * [wav2vag](https://github.com/ColdSauce/psxsdk/blob/master/tools/wav2vag.c) : convert WAV to psx VAG
-  * [psxavenc](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/psxavenc) : convert WAV to psx XA
-  * [xainterleave](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/xainterleave) : interleave psx XA files
-
-Windows executables are provided for convenience in this repo.
+  * [img2tim](https://github.com/Lameguy64/img2tim) : convert image to psx TIM - Win32 pre-built bin : https://github.com/Lameguy64/img2tim#download
+  * [wav2vag](https://github.com/ColdSauce/psxsdk/blob/master/tools/wav2vag.c) : convert WAV to psx VAG - Win32 pre-built bin :  http://psx.arthus.net/tools/wav2vag-win32.zip
+  * [psxavenc](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/psxavenc) : convert WAV to psx XA  - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
+  * [xainterleave](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/xainterleave) : interleave psx XA files - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
 
 For users with **Imagemagick** installed, there is an option when exporting to use that instead of pngquant.  
 
