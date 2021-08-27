@@ -58,6 +58,20 @@ These utilities should be in your [$PATH](https://stackoverflow.com/questions/44
   * [psxavenc](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/psxavenc) : convert WAV to psx XA  - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
   * [xainterleave](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/xainterleave) : interleave psx XA files - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
 
+Linux users, these utilities are trivial to build using `gcc -o output source.c`. Only `psxavenc` and `img2tim` are a bit more involved as you should install the ffmpeg and freeimage dev packages from your distro before compiling.
+
+On Debian,
+
+```bash
+sudo apt install libavformat-dev libfreeimage-dev
+```
+
+should set you up. Arch users, dev files are already on your system as long as the package is installed.
+
+```bash
+sudo pacman -S ffmpeg freeimage
+```
+
 For users with **Imagemagick** installed, there is an option when exporting to use that instead of pngquant.  
 
 4. Enable the add-on in Blender by going to user preferences, Add-ons tab, and enable `Import-Export: PSX TMesh exporter`.  
