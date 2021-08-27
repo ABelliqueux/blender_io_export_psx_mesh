@@ -58,7 +58,8 @@ These utilities should be in your [$PATH](https://stackoverflow.com/questions/44
   * [psxavenc](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/psxavenc) : convert WAV to psx XA  - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
   * [xainterleave](https://github.com/ABelliqueux/candyk-psx/tree/master/toolsrc/xainterleave) : interleave psx XA files - Win32 pre-built bin :  http://psx.arthus.net/sdk/candyk-psx-tools.zip
 
-Linux users, these utilities are trivial to build using `gcc -o output source.c`. Only `psxavenc` and `img2tim` are a bit more involved as you should install the ffmpeg and freeimage dev packages from your distro before compiling.
+Linux users, these utilities are trivial to build using `gcc -o output source.c`.  
+Only `psxavenc` and `img2tim` are a bit more involved as you should install the ffmpeg and freeimage dev packages from your distro before compiling.  
 
 On Debian,
 
@@ -70,6 +71,20 @@ should set you up. Arch users, dev files are already on your system as long as t
 
 ```bash
 sudo pacman -S ffmpeg freeimage
+```
+
+Building `img2tim` :
+
+```bash
+# In img2tim's sources directory :
+gcc -o img2tim main.cpp
+```
+
+Building `psxavenc` and `xainterleave` :
+
+```bash
+# Use the Makefile that's in candyk-psx's sources directory :
+make tools
 ```
 
 For users with **Imagemagick** installed, there is an option when exporting to use that instead of pngquant.  
