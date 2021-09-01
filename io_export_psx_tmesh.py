@@ -547,7 +547,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             for obj in soundFiles:
                 f.write("SOUND_OBJECT " + fileName + "_" + obj.objName.replace(".", "_") + " = {\n" +
                         "\t{" + str(psxLoc(obj.location.x)) + "," + str(psxLoc(obj.location.y)) + "," + str(psxLoc(obj.location.z)) + "},\n" +
-                        "\t" + str(obj.volume * 0x3fff) + ", " + str(obj.volume_min * 0x3fff) + ", " + str(obj.volume_max * 0x3fff) + ",\n" )
+                        "\t" + str(obj.volume * 0x3fff) + ", " + str(obj.volume * 0x3fff) + ", " + str(obj.volume_min * 0x3fff) + ", " + str(obj.volume_max * 0x3fff) + ",\n" )
                 if obj.XAsize == -1 :
                     f.write("\t&" + fileName + "_VAGBank.samples[" + str(obj.index) + "],\n" +
                             "\t0,\n")
@@ -865,7 +865,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 
         h.write("typedef struct SOUND_OBJECT {\n" +
                 "\tVECTOR location;\n" + 
-                "\tint volume, volume_min, volume_max;\n" +
+                "\tint volumeL, volumeR, volume_min, volume_max;\n" +
                 "\tVAGsound * VAGsample;\n" +
                 "\tXAsound * XAsample;\n" + 
                 "\tMESH * parent;\n" +
