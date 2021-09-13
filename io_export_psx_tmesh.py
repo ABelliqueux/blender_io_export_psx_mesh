@@ -922,6 +922,69 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "VECTOR " + fileName + "_BKc = { " + BKr + ", " + BKg + ", " + BKb + ", 0 };\n\n"
                 )
         level_symbols.append( "VECTOR " + fileName + "_BKc" )
+    # Dictionaries
+        # Sound
+        # These speaker objects's positions will have to be updated
+        spkrParents = defaultdict(dict)
+        spkrOrphans = []
+        # array of Sound objects
+        soundFiles = []
+        # current XA files and channel
+        freeXAfile = 0
+        freeXAchannel = 0
+        # Lights
+        lmpObjects = {}
+        for obj in bpy.data.objects:
+            # Build a dictionary of objects that have child SPEAKER objects
+            if obj.type == 'SPEAKER':
+                if obj.data.sound is not None:
+                    # and child of a mesh
+                    if obj.parent is not None:
+                        if obj.parent.type == 'MESH':
+                            parent = obj.parent
+                            # if parent exists in parent list, append to child list
+                            # ~ if obj.parent.name in spkrParents:
+                                # ~ spkrParents[obj.parent.name].append(obj.name)
+                            # ~ else:
+                                # if parent does not exist in list yet, create array
+                                # ~ spkrParents[obj.parent.name] = [obj.name]
+                    # has no parent
+                    else:
+                        # ~ spkrOrphans.append(obj.name)
+                        parent = 0
+                    # get sound informations
+                    objName = obj.name
+                    soundName = obj.data.sound.name
+                    soundPath = bpy.path.abspath(obj.data.sound.filepath)
+                    location = obj.location
+                    volume = int(obj.data.volume)
+                    volume_min = int(obj.data.volume_min)
+                    volume_max = int(obj.data.volume_max)
+                    # convert sound
+                    if obj.data.get('isXA'):
+                        XAsectorsize = 2336 if XAmode else 2352
+                        if freeXAchannel > 7:
+                            freeXAfile += 1
+                            freeXAchannel = 0
+                        convertedSoundPath = sound2XA(soundPath, soundName, bpp=4, XAfile=freeXAfile, XAchannel=freeXAchannel)
+                        XAfile = freeXAfile
+                        XAchannel = freeXAchannel
+                        freeXAchannel += 1
+                        if os.path.exists(convertedSoundPath):
+                            XAsize =  os.path.getsize(convertedSoundPath)
+                            XAend = int((( XAsize / XAsectorsize ) - 1))
+                        else:
+                            XAsize = -1
+                            XAend = -1
+                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1, XAfile, XAchannel, XAsize, XAend ) )
+                    else:
+                        convertedSoundPath = sound2VAG(soundPath, soundName)
+                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1 ) )
+                # Build dict of LAMPs objects
+                # We want to be able to find an object based on it's data name.
+            if obj.type == 'LAMP':
+                lmpObjects[obj.data.name] = obj.name
+                    
     ## Camera setup
         # List of points defining the camera path
         camPathPoints = []
@@ -989,42 +1052,54 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Light sources will be similar to Blender's sunlamp
         # A maximum of 3 light sources will be used
         # LLM : Local Light Matrix   
-        if len( bpy.data.lamps ) is not None:
+        if len( lmpObjects ) is not None:
             cnt = 0
-            pad = 3 - len( bpy.data.lamps )
+            pad = 3 - len( lmpObjects ) if ( len( lmpObjects ) < 3 ) else 0 
             f.write( "MATRIX " + fileName + "_lgtmat = {\n")
-            for l in range(len(bpy.data.lamps)):
-                # Lightsource energy
-                energy   = int( bpy.data.lamps[ l ].energy * 4096 )
-                # Get lightsource's world orientation
-                lightdir = bpy.data.objects[ bpy.data.lamps[ l ].name ].matrix_world * Vector( ( 0, 0, -1, 0 ) )
-                f.write( 
-                    "\t" + str( int(  lightdir.x * energy ) ) + "," + 
-                    "\t" + str( int( -lightdir.z * energy ) ) + "," +
-                    "\t" + str( int(  lightdir.y * energy ) )  
-                    )
-                if l != len( bpy.data.lamps ) - 1:
-                    f.write(",\n")
-                # If less than 3 light sources exist in blender, fill the matrix with 0s.                
-                if pad:
-                    f.write(",\n")
-                    while cnt < pad:
-                        f.write("\t0,0,0")
-                        if cnt != pad:
-                            f.write(",\n")
+            for light in sorted(lmpObjects):
+                # Get rid of orphans
+                if bpy.data.lamps[light].users == 0:
+                    continue
+                # PSX can only use 3 light sources
+                if cnt < 3 :
+                    # Lightsource energy
+                    energy = int( bpy.data.lamps[light].energy * 4096 )
+                    # ~ energy = int( light.energy * 4096 )
+                    # Get lightsource's world orientation
+                    lightdir = bpy.data.objects[lmpObjects[light]].matrix_world * Vector( ( 0, 0, -1, 0 ) )
+                    f.write( 
+                        "\t" + str( int(  lightdir.x * energy ) ) + "," + 
+                        "\t" + str( int( -lightdir.z * energy ) ) + "," +
+                        "\t" + str( int(  lightdir.y * energy ) )  
+                        )
+                    if cnt < 2:
+                        f.write(",\n")
+                    # If less than 3 light sources exist in blender, fill the matrix with 0s.                
+                    if pad:
+                        f.write(",\n")
+                        while cnt < pad:
+                            f.write("\t0,0,0")
+                            if cnt != pad:
+                                f.write(",\n")
+                            cnt += 1
+                    else:
                         cnt += 1
             f.write("\n\t};\n\n")
             level_symbols.append( "MATRIX " + fileName + "_lgtmat" )
             # LCM : Local Color Matrix
             f.write( "MATRIX " + fileName + "_cmat = {\n")
             LCM = []
-            for l in bpy.data.lamps:
+            cnt = 0
+            # If more than 3 light sources exists, use the 3 first in alphabetic order (same as in Blender's outliner)
+            for light in sorted(lmpObjects):
                 # If orphan, get on with it
-                if l.users == 0:
+                if bpy.data.lamps[light].users == 0:
                     continue
-                LCM.append( str( int( l.color.r * 4096 ) if l.color.r else 0 ) )
-                LCM.append( str( int( l.color.g * 4096 ) if l.color.g else 0 ) )
-                LCM.append( str( int( l.color.b * 4096 ) if l.color.b else 0 ) )
+                if cnt < 3 :
+                    LCM.append( str( int( bpy.data.lamps[light].color.r * 4096 ) if bpy.data.lamps[light].color.r else 0 ) )
+                    LCM.append( str( int( bpy.data.lamps[light].color.g * 4096 ) if bpy.data.lamps[light].color.g else 0 ) )
+                    LCM.append( str( int( bpy.data.lamps[light].color.b * 4096 ) if bpy.data.lamps[light].color.b else 0 ) )
+                    cnt += 1
             if len(LCM) < 9:
                 while len(LCM) < 9:
                     LCM.append('0')
@@ -1778,61 +1853,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         level_symbols.append( "CAMANGLE * " + fileName + "_camPtr" )
         level_symbols.append( "NODE * " + fileName + "_curNode" )
     ## Sound
-        # Build a dictionary of objects that have child SPEAKER objects
-        # These objects's positions will have to be updated
-        spkrParents = defaultdict(dict)
-        spkrOrphans = []
-        # array of Sound objects
-        soundFiles = []
-        # current XA files and channel
-        freeXAfile = 0
-        freeXAchannel = 0
-        for obj in bpy.data.objects:
-            # if obj is a speaker
-            if obj.type == 'SPEAKER':
-                if obj.data.sound is not None:
-                    # and child of a mesh
-                    if obj.parent is not None:
-                        if obj.parent.type == 'MESH':
-                            parent = obj.parent
-                            # if parent exists in parent list, append to child list
-                            # ~ if obj.parent.name in spkrParents:
-                                # ~ spkrParents[obj.parent.name].append(obj.name)
-                            # ~ else:
-                                # if parent does not exist in list yet, create array
-                                # ~ spkrParents[obj.parent.name] = [obj.name]
-                    # has no parent
-                    else:
-                        # ~ spkrOrphans.append(obj.name)
-                        parent = 0
-                    # get sound informations
-                    objName = obj.name
-                    soundName = obj.data.sound.name
-                    soundPath = bpy.path.abspath(obj.data.sound.filepath)
-                    location = obj.location
-                    volume = int(obj.data.volume)
-                    volume_min = int(obj.data.volume_min)
-                    volume_max = int(obj.data.volume_max)
-                    # convert sound
-                    if obj.data.get('isXA'):
-                        XAsectorsize = 2336 if XAmode else 2352
-                        if freeXAchannel > 7:
-                            freeXAfile += 1
-                            freeXAchannel = 0
-                        convertedSoundPath = sound2XA(soundPath, soundName, bpp=4, XAfile=freeXAfile, XAchannel=freeXAchannel)
-                        XAfile = freeXAfile
-                        XAchannel = freeXAchannel
-                        freeXAchannel += 1
-                        if os.path.exists(convertedSoundPath):
-                            XAsize =  os.path.getsize(convertedSoundPath)
-                            XAend = int((( XAsize / XAsectorsize ) - 1))
-                        else:
-                            XAsize = -1
-                            XAend = -1
-                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1, XAfile, XAchannel, XAsize, XAend ) )
-                    else:
-                        convertedSoundPath = sound2VAG(soundPath, soundName)
-                        soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1 ) )
+        # Use dict generated earlier
         # Default values
         XAFiles = "0"
         VAGBank = "0"
