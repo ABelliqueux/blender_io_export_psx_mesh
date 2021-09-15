@@ -588,9 +588,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             TIMshift = 2
         # Set context area to 3d view
         previousAreaType = 0
-        if bpy.context.object.mode != 'OBJECT' :
+        if bpy.context.mode != 'OBJECT' :
             previousAreaType = bpy.context.area.type
             bpy.context.area.type="VIEW_3D"
+            if bpy.context.object is None:
+                bpy.context.scene.objects.active = bpy.context.scene.objects[first_mesh]
             # Leave edit mode to avoid errors
             bpy.ops.object.mode_set(mode='OBJECT')
             # restore previous area type
@@ -1058,7 +1060,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # LLM : Local Light Matrix   
         if len( lmpObjects ) is not None:
             cnt = 0
-            pad = 3 - len( lmpObjects ) if ( len( lmpObjects ) < 3 ) else 0 
+            # ~ pad = 3 - len( lmpObjects ) if ( len( lmpObjects ) < 3 ) else 0 
             f.write( "MATRIX " + fileName + "_lgtmat = {\n")
             for light in sorted(lmpObjects):
                 # Get rid of orphans
@@ -1072,23 +1074,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     # Get lightsource's world orientation
                     lightdir = bpy.data.objects[lmpObjects[light]].matrix_world * Vector( ( 0, 0, -1, 0 ) )
                     f.write( 
-                        "\t" + str( int(  lightdir.x * energy ) ) + "," + 
-                        "\t" + str( int( -lightdir.z * energy ) ) + "," +
-                        "\t" + str( int(  lightdir.y * energy ) )  
+                        "\t" + str( int(  lightdir.x * energy ) ) + ", " + 
+                        str( int( -lightdir.z * energy ) ) + ", " +
+                        str( int(  lightdir.y * energy ) )  
                         )
                     if cnt < 2:
                         f.write(",\n")
-                    # If less than 3 light sources exist in blender, fill the matrix with 0s.                
-                    if pad:
-                        f.write(",\n")
-                        while cnt < pad:
-                            f.write("\t0,0,0")
-                            if cnt != pad:
-                                f.write(",\n")
-                            cnt += 1
-                    else:
-                        cnt += 1
-            f.write("\n\t};\n\n")
+                    cnt += 1
+            # If less than 3 light sources exist in blender, fill the matrix with 0s.                
+            # ~ if pad:
+            while cnt < 3:
+                f.write("\t0, 0, 0")
+                if cnt < 2:
+                    f.write(",")
+                f.write("\n")
+                cnt += 1
+                # ~ else:
+            f.write("\t};\n\n")
             level_symbols.append( "MATRIX " + fileName + "_lgtmat" )
             # LCM : Local Color Matrix
             f.write( "MATRIX " + fileName + "_cmat = {\n")
