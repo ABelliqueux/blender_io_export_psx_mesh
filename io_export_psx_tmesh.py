@@ -587,10 +587,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             TIMbpp = 4
             TIMshift = 2
         # Set context area to 3d view
-        previousAreaType = bpy.context.area.type
-        bpy.context.area.type="VIEW_3D"
-        # Leave edit mode to avoid errors
-        bpy.ops.object.mode_set(mode='OBJECT')
+        previousAreaType = 0
+        if bpy.context.object.mode != 'OBJECT' :
+            previousAreaType = bpy.context.area.type
+            bpy.context.area.type="VIEW_3D"
+            # Leave edit mode to avoid errors
+            bpy.ops.object.mode_set(mode='OBJECT')
+            # restore previous area type
+            bpy.context.area.type = previousAreaType
         # If set, triangulate objects of type mesh 
         if self.exp_Triangulate:
             for o in range(len(bpy.data.objects)):
@@ -1939,8 +1943,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         for symbol in level_symbols:
             h.write( "extern " + symbol + ";\n")
         h.close()
-        # Restore previous area type
-        bpy.context.area.type = previousAreaType
         return {'FINISHED'};
 def menu_func(self, context):
     self.layout.operator(ExportMyFormat.bl_idname, text="PSX Format(.c)");
