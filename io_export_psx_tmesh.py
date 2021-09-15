@@ -41,7 +41,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         name="Scale",
         description="Scale of exported mesh.",
         min=1, max=1000,
-        default=65,
+        default=65.0,
         )
     exp_Precalc = BoolProperty(
         name="Use precalculated BGs",
@@ -56,6 +56,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     exp_useIMforTIM = BoolProperty(
         name = "Use ImageMagick",
         description = "Use installed Image Magick's convert tool to convert PNGs to 8/4bpp",
+        default = False
+    )
+    exp_convTexToPNG = BoolProperty(
+        name = "Convert images to PNG",
+        description = "Use installed Image Magick's convert tool to convert images to PNG.",
         default = False
     )
     exp_TIMbpp = BoolProperty(
@@ -242,6 +247,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             global timFolder
             # By default, converts a RGB to 8bpp, 256 colors indexed PNG, then to a 8bpp TIM image
             filePathWithoutExt = filePathWithExt[ : filePathWithExt.rfind('.') ]
+            ext = filePathWithExt[ filePathWithExt.rfind('.') + 1 : ]
             fileBaseName = os.path.basename(filePathWithoutExt)
             # For windows users, add '.exe' to the command
             exe = ""
@@ -250,7 +256,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # 8bpp TIM needs < 256 colors
             if bpp == 8:
                 # Clamp number of colors to 256
-                colors = min( 256, colors )
+                colors = min( 255, colors )
             elif bpp == 4:
             # 4bpp TIM needs < 16 colors
                 # Clamp number of colors to 16
@@ -261,14 +267,22 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 transpMethod = "-b"
             elif transparency == "nonblack":
                 transpMethod = "-t"
-            # Quantization of colors with pngquant ( https://pngquant.org/ )
-            subprocess.call( [ "pngquant" + exe, str( colors ), filePathWithExt, "-o", filePathWithExt, "--force" ] )
             # Image magick's convert can be used alternatively ( https://imagemagick.org/ )
             if self.exp_useIMforTIM :
                 # ImageMagick alternative
-                subprocess.call( [ "convert" + exe, filePathWithExt, "-colors", str( colors ), filePathWithExt ] )
+                subprocess.call( [ "convert" + exe, filePathWithExt, "-colors", str( colors ), filePathWithoutExt + ".png" ] )
+                filePathWithExt = filePathWithoutExt + ".png" 
+                print("Using IM on " + filePathWithExt)
+            else:
+                if self.exp_convTexToPNG:
+                    if ext != "png" or ext != "PNG":
+                        # Convert images to PNG
+                        subprocess.call( [ "convert" + exe, filePathWithExt, "-colors", str( colors ), filePathWithoutExt + ".png" ] )
+                        filePathWithExt = filePathWithoutExt + ".png" 
+                # Quantization of colors with pngquant ( https://pngquant.org/ )
+                subprocess.run( [ "pngquant" + exe, "-v", str( colors ), filePathWithExt, "--ext", ".pngq" ] )
             # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
-            subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", timFolder + os.sep + fileBaseName + ".tim", filePathWithExt ] )
+            subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", timFolder + os.sep + fileBaseName + ".tim", filePathWithExt + "q" ] )
         def VramIsFull( size ):
             # Returns True if not enough space in Vram for image
             # Transpose bpp to bitshift value
@@ -940,6 +954,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         freeXAchannel = 0
         # Lights
         lmpObjects = {}
+        # Meshes
+        mshObjects = {}
         for obj in bpy.data.objects:
             # Build a dictionary of objects that have child SPEAKER objects
             if obj.type == 'SPEAKER':
@@ -990,7 +1006,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # We want to be able to find an object based on it's data name.
             if obj.type == 'LAMP':
                 lmpObjects[obj.data.name] = obj.name
-                    
+            if obj.type == 'MESH':
+                mshObjects[obj.data.name] = obj.name
     ## Camera setup
         # List of points defining the camera path
         camPathPoints = []
@@ -1051,7 +1068,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("CAMPATH " + fileName + "_camPath = {\n" +
                             "\t0,\n" +
                             "\t0,\n" +
-                            "\t0\n"  +
+                            "\t0,\n"  +
+                            "\t{0}\n"  +
                             "};\n\n" )
             level_symbols.append( "CAMPATH " + fileName + "_camPath" )
     ## Lighting setup 
@@ -1079,7 +1097,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         str( int(  lightdir.y * energy ) )  
                         )
                     if cnt < 2:
-                        f.write(",\n")
+                        f.write(",")
+                    f.write(" // L" + str(cnt+1) + "\n")
                     cnt += 1
             # If less than 3 light sources exist in blender, fill the matrix with 0s.                
             # ~ if pad:
@@ -1089,7 +1108,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     f.write(",")
                 f.write("\n")
                 cnt += 1
-                # ~ else:
             f.write("\t};\n\n")
             level_symbols.append( "MATRIX " + fileName + "_lgtmat" )
             # LCM : Local Color Matrix
@@ -1111,9 +1129,10 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     LCM.append('0')
             # Write LC matrix
             f.write(
-                "\t" + LCM[ 0 ] + "," + LCM[ 3 ] + "," + LCM[ 6 ] + ",\n" +
-                "\t" + LCM[ 1 ] + "," + LCM[ 4 ] + "," + LCM[ 7 ] + ",\n" +
-                "\t" + LCM[ 2 ] + "," + LCM[ 5 ] + "," + LCM[ 8 ] + "\n" )
+                "//   L1   L2   L3\n"
+                "\t" + LCM[ 0 ] + ", " + LCM[ 3 ] + ", " + LCM[ 6 ] + ", // R\n" + 
+                "\t" + LCM[ 1 ] + ", " + LCM[ 4 ] + ", " + LCM[ 7 ] + ", // G\n" +
+                "\t" + LCM[ 2 ] + ", " + LCM[ 5 ] + ", " + LCM[ 8 ] + "  // B\n" )
             f.write("\t};\n\n")
             level_symbols.append( "MATRIX " + fileName + "_cmat" )
     ## Meshes 
@@ -1141,9 +1160,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     Xvals.append(  v.x )
                     Yvals.append(  v.y )
                     Zvals.append( -v.z )
-                    f.write("\t{ " + str( round(  v.x * scale ) ) +
-                               "," + str( round( -v.z * scale ) ) +
-                               "," + str( round(  v.y * scale ) ) + ",0 }" )
+                    f.write("\t{ " + str( ceil(  v.x * scale ) ) +
+                               "," + str( ceil( -v.z * scale ) ) +
+                               "," + str( ceil(  v.y * scale ) ) + ",0 }" )
                     if i != len(m.vertices) - 1:
                         f.write(",")
                     f.write("\n")
@@ -1182,7 +1201,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                     f.write(",")
                                 f.write("\n")
                             f.write("};\n\n")
-                            # Save UV texture to a file in ./TIM
+                            # Save UV texture to a file in ./TEX
                             # It will have to be converted to a tim file
                             if texture_image.filepath == '':
                                 # ~ os.makedirs(dirpath, exist_ok = 1)
@@ -1261,12 +1280,16 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     levelPtr = cleanName
                 if m.get('isProp'):
                     propPtr = cleanName
+                if chkProp['mass'] == 0:
+                    chkProp['mass'] = 1
+                        
         ## Vertex animation
                 # write vertex anim if isAnim != 0 
                 # Source : https://stackoverflow.com/questions/9138637/vertex-animation-exporter-for-blender
                 if m.get("isAnim") is not None and m["isAnim"] != 0:
                     # Write vertex pos
-                    o = bpy.data.objects[m.name]
+                    # ~ o = bpy.data.objects[m.name]
+                    o = bpy.data.objects[mshObjects[m.name]]
                     # If an action exists with the same name as the object, use that
                     if m.name in bpy.data.actions:
                         frame_start = int(bpy.data.actions[m.name].frame_range[0])
@@ -1313,8 +1336,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write(
                         "BODY " + fileName + "_model"+cleanName+"_body = {\n" +
                         "\t{0, 0, 0, 0},\n" +
-                        "\t" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," + str(round(-bpy.data.objects[m.name].location.z * scale)) + "," + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0,\n" +
-                        "\t"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0,\n" +
+                        "\t" + str(round(bpy.data.objects[mshObjects[m.name]].location.x * scale)) + "," + str(round(-bpy.data.objects[mshObjects[m.name]].location.z * scale)) + "," + str(round(bpy.data.objects[mshObjects[m.name]].location.y * scale)) + ", 0,\n" +
+                        "\t"+ str(round(degrees(bpy.data.objects[mshObjects[m.name]].rotation_euler.x)/360 * 4096)) + "," + str(round(degrees(-bpy.data.objects[mshObjects[m.name]].rotation_euler.z)/360 * 4096)) + "," + str(round(degrees(bpy.data.objects[mshObjects[m.name]].rotation_euler.y)/360 * 4096)) + ", 0,\n" +
                         "\t" + str(int(chkProp['mass'])) + ",\n" +
                         "\tONE/" + str(int(chkProp['mass'])) + ",\n" +
                         # write min and max values of AABBs on each axis
@@ -1350,6 +1373,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     for t in range(len(m.uv_textures)): 
                         if m.uv_textures[0].data[0].image != None:
                             tex_name = texture_image.name
+                            # extension defaults to the image file format
+                            tex_ext  = texture_image.file_format.lower()
                             prefix   = str.partition(tex_name, ".")[0].replace('-','_')
                             prefix   = CleanName(prefix)
                             # Add Tex name to list if it's not in there already
@@ -1357,10 +1382,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 break
                             else:
                                 # Convert PNG to TIM
-                                # If filename contains a dot, remove extension
+                                # If filename contains a dot, separate name and extension
                                 if tex_name.find('.') != -1:
+                                    # store extension
+                                    tex_ext = tex_name[ tex_name.rfind( '.' ) + 1 : ]
+                                    # store name
                                     tex_name = tex_name[ : tex_name.rfind( '.' ) ]
-                                filePathWithExt = textureFolder + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower()
+                                # ~ filePathWithExt = textureFolder + os.sep + CleanName( tex_name ) + "." + texture_image.file_format.lower()
+                                filePathWithExt = textureFolder + os.sep + CleanName( tex_name ) + "." + tex_ext
                                 if not VramIsFull( bpy.context.scene.render.resolution_x ):
                                     convertBGtoTIM( filePathWithExt, bpp = TIMbpp, timX = nextTpage, timY = tpageY, clutY = nextClutSlot )
                                     setNextTimPos( texture_image )
@@ -1405,13 +1434,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     f.write("\t0,\n" +
                             "\t0,\n")     
                 f.write(
-                        "\t{0}, // Nbr of vertices\n" +
-                        "\t{" + str(round(bpy.data.objects[m.name].location.x * scale)) + "," 
-                              + str(round(-bpy.data.objects[m.name].location.z * scale)) + ","
-                              + str(round(bpy.data.objects[m.name].location.y * scale)) + ", 0}, // position\n" +
-                        "\t{"+ str(round(degrees(bpy.data.objects[m.name].rotation_euler.x)/360 * 4096)) + ","
-                             + str(round(degrees(-bpy.data.objects[m.name].rotation_euler.z)/360 * 4096)) + "," 
-                             + str(round(degrees(bpy.data.objects[m.name].rotation_euler.y)/360 * 4096)) + ", 0}, // rotation\n" +
+                        "\t{0}, // Matrix\n" +
+                        "\t{" + str(round(bpy.data.objects[mshObjects[m.name]].location.x * scale)) + "," 
+                              + str(round(-bpy.data.objects[mshObjects[m.name]].location.z * scale)) + ","
+                              + str(round(bpy.data.objects[mshObjects[m.name]].location.y * scale)) + ", 0}, // position\n" +
+                        "\t{"+ str(round(degrees(bpy.data.objects[mshObjects[m.name]].rotation_euler.x)/360 * 4096)) + ","
+                             + str(round(degrees(-bpy.data.objects[mshObjects[m.name]].rotation_euler.z)/360 * 4096)) + "," 
+                             + str(round(degrees(bpy.data.objects[mshObjects[m.name]].rotation_euler.y)/360 * 4096)) + ", 0}, // rotation\n" +
                         "\t" + str( int( chkProp[ 'isProp' ] ) ) + ", // isProp\n" +
                         "\t" + str( int( chkProp[ 'isRigidBody' ] ) ) + ", // isRigidBody\n" +
                         "\t" + str(int(chkProp['isStaticBody'])) + ", // isStaticBody\n" +
@@ -1432,13 +1461,17 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 else:
                         f.write("\t0, // No animation data\n")
                 f.write(
-                        "\t" + "subs_" + m.name + ",\n" +
+                        "\t" + "subs_" + CleanName(m.name) + ",\n" +
                         "\t0 // Screen space coordinates\n" +
                         "};\n\n"
                         )
                 level_symbols.append( "MESH " + fileName + "_mesh" + cleanName )
         # Remove portals from mesh list as we don't want them to be exported
-        meshList = list(bpy.data.meshes)
+        meshList = []
+        # Build list without orphans
+        for mesh in bpy.data.meshes:
+            if mesh.users != 0:
+                meshList.append(mesh)
         portalList = []
         for mesh in meshList:
             if mesh.get('isPortal'):
@@ -1736,12 +1769,14 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 if moveable.data.get( 'isProp' ):
                     # If is in current plane, add it to the list
                     if isInPlane( LvlPlanes[ p ], LvlObjects[ moveable.name ] ) :
-                        PropPlane[moveable] = p
+                        PropPlane[moveable] = CleanName(p)
+                        # ~ PropPlane[moveable] = CleanName(bpy.data.objects[p].data.name)
                 if 'rigidbodies' in PlanesRigidBodies[p]:
                     if moveable.name not in PlanesRigidBodies[p]['rigidbodies']:
-                        PlanesRigidBodies[ p ][ 'rigidbodies' ].append(CleanName( moveable.name ) )
+                        # ~ PlanesRigidBodies[ p ][ 'rigidbodies' ].append(CleanName( moveable.name ) )
+                        PlanesRigidBodies[ p ][ 'rigidbodies' ].append(moveable.name )
                 else:
-                    PlanesRigidBodies[p] = { 'rigidbodies' : [ CleanName(moveable.name) ] }
+                    PlanesRigidBodies[p] = { 'rigidbodies' : [ moveable.name ] }
             # Find surrounding planes
             for op in LvlPlanes:
                 # Loop on other planes
@@ -1807,7 +1842,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         "\t{\n")
                 i = 0
                 for obj in PlanesObjects[p]['objects']:
-                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(obj))
+                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(bpy.data.objects[obj].data.name))
                     if i < len(PlanesObjects[p]['objects']) - 1:
                         f.write(",")
                     i += 1
@@ -1826,7 +1861,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         "\t{\n")
                 i = 0
                 for obj in PlanesRigidBodies[p]['rigidbodies']:
-                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(obj))
+                    # ~ f.write( "\t\t&" + fileName + "_mesh" + CleanName(obj))
+                    f.write( "\t\t&" + fileName + "_mesh" + CleanName(bpy.data.objects[obj].data.name))
                     if i < len(PlanesRigidBodies[p]['rigidbodies']) - 1:
                         f.write(",")
                     i += 1
@@ -1840,7 +1876,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             level_symbols.append( "CHILDREN " + fileName + "_node" + pName + "_rigidbodies" )
             # Write NODE structure
             f.write( "NODE " + fileName + "_node" + pName + " = {\n" +
-                     "\t&" + fileName + "_mesh" + pName + ",\n" +
+                     "\t&" + fileName + "_mesh" + CleanName(bpy.data.objects[p].data.name) + ",\n" +
                      "\t&" + fileName + "_node" + pName + "_siblings,\n" +
                      "\t&" + fileName + "_node" + pName + "_objects,\n" +
                      "\t&" + fileName + "_node" + pName + "_rigidbodies\n" +
@@ -1848,7 +1884,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Feed to level_symbols
             level_symbols.append( "NODE " + fileName + "_node" + pName )
         f.write("MESH * " + fileName + "_actorPtr = &" + fileName + "_mesh" + CleanName(actorPtr) + ";\n")
-        f.write("MESH * " + fileName + "_levelPtr = &" + fileName + "_mesh" + CleanName(levelPtr) + ";\n")
+        # ~ f.write("MESH * " + fileName + "_levelPtr = &" + fileName + "_mesh" + CleanName(levelPtr) + ";\n")
+        f.write("MESH * " + fileName + "_levelPtr = &" + fileName + "_mesh" + CleanName(bpy.data.objects[levelPtr].data.name) + ";\n")
         f.write("MESH * " + fileName + "_propPtr  = &" + fileName + "_mesh" + propPtr + ";\n\n")
         f.write("CAMANGLE * " + fileName + "_camPtr =  &" + fileName + "_camAngle_" + CleanName(defaultCam) + ";\n\n")
         f.write("NODE * " + fileName + "_curNode =  &" + fileName + "_node" + CleanName(nodePtr) + ";\n\n")
@@ -1894,7 +1931,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "\t(MESH **)&" + fileName + "_meshes,\n" +
             "\t&" + fileName + "_meshes_length,\n" +
             "\t&" + fileName + "_mesh" + CleanName(actorPtr)+ ",\n" +
-            "\t&" + fileName + "_mesh" + CleanName(levelPtr)+ ",\n" +
+            "\t&" + fileName + "_mesh" + CleanName(bpy.data.objects[levelPtr].data.name)+ ",\n" +
             "\t&" + fileName + "_mesh" + propPtr + ",\n" +
             "\t&" + fileName + "_camAngle_" + CleanName(defaultCam) + ",\n" +
             "\t&" + fileName + "_camPath,\n" +
@@ -1928,7 +1965,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         newdata = filedata.replace("NODE_DECLARATION\n", "")
         # Now substitute mesh name for corresponding plane's NODE
         for moveable in PropPlane:
-            newdata = newdata.replace("subs_" + moveable.name, "&" + fileName + "_node" + PropPlane[moveable])
+            newdata = newdata.replace("subs_" + CleanName(moveable.name), "&" + fileName + "_node" + PropPlane[moveable])
         # Subsitute mesh name with 0 in the other MESH structs
         newdata = sub("(?m)^\tsubs_.*$", "\t0,", newdata )
         # Open and write file
