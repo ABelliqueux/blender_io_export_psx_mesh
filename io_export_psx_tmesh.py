@@ -125,6 +125,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             name = name.replace('.','_')
             name = unicodedata.normalize('NFKD',name).encode('ASCII', 'ignore').decode()
             return name
+    ### Space utilities
         def isInFrame(scene, cam, target):
             # Checks if an object is in view frame
             position = world_to_camera_view(scene, cam, target.location)
@@ -243,6 +244,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     vector.y = resY - max ( 0, min ( resY, int( resY * vector.y ) ) )
                     vector.z = int( vector.z )
             return screenPos
+    ### Texture utilities
         def convertBGtoTIM( filePathWithExt, colors = 256, bpp = 8, timX = 640, timY = 0, clutX = 0, clutY = 480, transparency = 'alpha'):
             global timFolder
             # By default, converts a RGB to 8bpp, 256 colors indexed PNG, then to a 8bpp TIM image
@@ -283,6 +285,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 subprocess.run( [ "pngquant" + exe, "-v", str( colors ), filePathWithExt, "--ext", ".pngq" ] )
             # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
             subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", timFolder + os.sep + fileBaseName + ".tim", filePathWithExt + "q" ] )
+    ### VRAM utilities
         def VramIsFull( size ):
             # Returns True if not enough space in Vram for image
             # Transpose bpp to bitshift value
@@ -360,7 +363,53 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             else:
                 linear = ( 1 + a ) * pow( component, 1 / 2.4 ) - a
             return linear
-        ### Sound conversion and export
+    ### Animation utilities
+        def rmEmptyNLA( obj ):
+            # Remove lna_tracks with no strips
+            if obj.animation_data.nla_tracks:
+                for track in obj.animation_data.nla_tracks:
+                    if not track.strips:
+                        obj.animation_data.nla_tracks.remove(track)    
+
+        def bakeActionToNLA( obj ):
+            # Bake action to nla_track
+            # Converting an action to nla_track makes it timeline independant.
+            hasAnim = 0
+            if obj.animation_data:
+                # Get action
+                objectAction = obj.animation_data.action
+                # If action exists
+                if objectAction:
+                    # Create new nla_track
+                    nlaTrack = obj.animation_data.nla_tracks.new()
+                    # Create new strip from action
+                    nlaTrack.strips.new( objectAction.name, objectAction.frame_range[0], objectAction )
+                    # Remove action
+                    obj.animation_data.action = None
+                hasAnim = 1
+                rmEmptyNLA(obj)
+            return hasAnim
+                                
+        def getTrackList(obj, parent):
+            # Build a dictionary of object's nla tracks and strips
+            # Dict data structure is like so:
+            # objDict[ <bpy_struct, Object("Object")> ][ <bpy_struct, NlaTrack("Track")> ][ <bpy_struct, NlaStrip("Action")> ]
+            # objAnims is a defaultdict(dict)
+            global objAnims
+            if obj.animation_data:
+                # Get nla tracks
+                objTracks = obj.animation_data.nla_tracks
+                for track in objTracks:
+                    for strip in track.strips:
+                        # If track struct exists in objAnims[parent], add strip to list
+                        if track in objAnims[parent]:
+                            if strip not in objAnims[parent][track]:
+                                objAnims[parent][track].append(strip)
+                        # If it doesn't, create dict item 'track' and initialize it to a list that contains the current strip
+                        else:
+                            objAnims[parent][track] = [strip]
+
+    ### Sound utilities
         class Sound:
             def __init__(self, objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, index, XAfile=-1, XAchannel=-1, XAsize=-1, XAend=-1):
                 self.objName = objName
@@ -513,7 +562,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             level_symbols.append("VAGbank " + fileName + "_VAGBank")
             # If SPU, we're using VAGs
             return SPU
-                
             
         def writeXAbank(f, XAfiles, level_symbols):
             index = 0
@@ -540,7 +588,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write( "\t}\n};\n" )
                 level_symbols.append("XAbank "  + fileName + "_XABank_" + str(XAlistIndex))
             return XAinter
-        
+            
         def writeXAfiles(f, XAlist, fileName):
             # Write XAFiles struct
             f.write("XAfiles " + fileName + "_XAFiles = {\n" +
@@ -555,6 +603,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 f.write("\t\t0")
             f.write("\n\t}\n};\n")
             level_symbols.append("XAfiles " + fileName + "_XAFiles")
+            
         def writeSoundObj(f, soundFiles, level_symbols):
             index = 0
             # Write SOUND_OBJECT structures
@@ -606,7 +655,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             previousAreaType = bpy.context.area.type
             bpy.context.area.type="VIEW_3D"
             if bpy.context.object is None:
-                bpy.context.scene.objects.active = bpy.context.scene.objects[first_mesh]
+                # select first object in scene
+                bpy.context.scene.objects.active = bpy.context.scene.objects[0]
             # Leave edit mode to avoid errors
             bpy.ops.object.mode_set(mode='OBJECT')
             # restore previous area type
@@ -692,6 +742,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # ~ if self.exp_UseScenesAsLevels:
             # ~ fileName = cleanName(bpy.data.scenes[0].name)
         # ~ else:
+        #
         # We're writing a few files:
         #  - custom_types.h contains the 'engine' 's specific struct definitions
         #  - level.h        contains the forward declaration of the level's variables
@@ -1289,7 +1340,23 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 if m.get("isAnim") is not None and m["isAnim"] != 0:
                     # Write vertex pos
                     # ~ o = bpy.data.objects[m.name]
+                    # Find object from mesh
                     o = bpy.data.objects[mshObjects[m.name]]
+                    # If has actions, create animation_data, nla_track and convert action to strip
+                    # Get object's key name 
+                    # shapeKeyName = bpy.data.objects['Cube'].active_shape_key.id_data.name
+                    # shapeKey     = bpy.data.shape_keys[shapeKeyName]
+                    # Get action name
+                    # bpy.data.shape_keys['Key.001'].animation_data.action.name
+                    # Get nla_tracks
+                    # nlaTrackName = shapeKey.animation_data.nla_tracks[0].name
+                    # Get strips on nlaTrack
+                    # strip = shapeKey.animation_data.nla_tracks[nlaTrackName].strips[0]
+                    # get strip start and end
+                    # strip.frame_start # strip.frame_end
+                    # for strip in strips:
+                        # print(str(strip.frame_start) + " - " + str(strip.frame_end))
+                    #
                     # If an action exists with the same name as the object, use that
                     if m.name in bpy.data.actions:
                         frame_start = int(bpy.data.actions[m.name].frame_range[0])
@@ -1941,8 +2008,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "\t&" + VAGBank + ",\n" +
             "\t&" + fileName + "_XAFiles\n" +
             "};\n\n")
-        # TODO : generate mkpsxiso config file
-        # 
         # Set default camera back in Blender
         if defaultCam != 'NULL':
             bpy.context.scene.camera = bpy.data.objects[ defaultCam ]
