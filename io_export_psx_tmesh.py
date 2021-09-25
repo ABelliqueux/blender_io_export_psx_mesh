@@ -95,6 +95,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         description = "Where should we look for mkpsxiso's config file ?",
         default= "." + os.sep + "config" + os.sep + "3dcam.xml"
     )
+    exp_mixOverlapingStrips = BoolProperty(
+        name="Mix overlaping nla animation tracks",
+        description="If set, the resulting animation will be an interpolation between the overlapping nla tracks.",
+        default = False,
+        )
     def execute(self, context):
     ### Globals declaration
         global nextTpage, freeTpage
@@ -102,6 +107,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         global tpageY
         global TIMbpp
         global timFolder
+        global objAnims
         XAmode = self.exp_XAmode
         # Set Scale 
         scale = self.exp_Scale
@@ -282,7 +288,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         subprocess.call( [ "convert" + exe, filePathWithExt, "-colors", str( colors ), filePathWithoutExt + ".png" ] )
                         filePathWithExt = filePathWithoutExt + ".png" 
                 # Quantization of colors with pngquant ( https://pngquant.org/ )
-                subprocess.run( [ "pngquant" + exe, "-v", str( colors ), filePathWithExt, "--ext", ".pngq" ] )
+                subprocess.run( [ "pngquant" + exe, "-v", "--force",  str( colors ), filePathWithExt, "--ext", ".pngq" ] )
             # Convert to tim with img2tim ( https://github.com/Lameguy64/img2tim )
             subprocess.call( [ "img2tim" + exe, transpMethod, "-bpp", str( bpp ), "-org", str( timX ), str( timY ), "-plt" , str( clutX ), str( clutY ),"-o", timFolder + os.sep + fileBaseName + ".tim", filePathWithExt + "q" ] )
     ### VRAM utilities
@@ -408,6 +414,115 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         # If it doesn't, create dict item 'track' and initialize it to a list that contains the current strip
                         else:
                             objAnims[parent][track] = [strip]
+        def getStripsTotal(objList):
+            stripsTotal = []
+            for track in objList:
+                for strip in objList[track]:
+                    stripsTotal.append(strip)
+            return stripsTotal
+            
+        def findOverlappingTrack(obj):
+            # Find overlapping strips through all the tracks
+            # Get all strips
+            tmpStrips = []
+            overlappingStrips = defaultdict(dict)
+            for track in obj:
+                for strip in obj[track]:
+                    tmpStrips.append(strip)
+            # Check each strip for overlapping
+            for tmpStrip in tmpStrips:
+                # Find other strips
+                otherStrips = [ otherStrip for otherStrip in tmpStrips if otherStrip is not tmpStrip ]
+                for otherStrip in otherStrips:
+                    # If strips are overlapping
+                    if otherStrip.frame_start < tmpStrip.frame_end :
+                        if otherStrip.frame_end > tmpStrip.frame_start:
+                            # Add to list, unless already there
+                            if otherStrip in overlappingStrips:
+                                if tmpStrip not in overlappingStrips:
+                                    overlappingStrips[otherStrip].append(tmpStrip)
+                            else:
+                                if tmpStrip not in overlappingStrips:
+                                    overlappingStrips[otherStrip] = [tmpStrip]
+            return overlappingStrips
+
+        def writeMESH_ANIMS(f, obj, stripList, fileName):
+            stripsTotal = len(stripList)
+            symbolName = fileName + "_model" + CleanName(obj.data.name) + "_anims"
+            f.write("MESH_ANIMS_TRACKS " + symbolName + " = {\n" +
+                            "\t" + str( stripsTotal ) + ",\n" +
+                            "\t{\n")
+            i = 0
+            for strip in stripList:
+                f.write("\t\t&" + fileName + "_model" + CleanName(obj.data.name) + "_anim_" +  CleanName(strip.name))
+                if i < stripsTotal - 1:
+                    f.write(",\n")
+                else:
+                    f.write("\n")
+                i += 1
+            f.write("\t}\n};\n\n")
+            return str( "MESH_ANIMS_TRACKS " + symbolName )
+
+        def writeVANIM(f, obj, strip, fileName, strip_start, strip_end):
+            # write the VANIM portion of a MESH_ANIMS struct declaration
+            # Get strip total length
+            print(strip.name)
+            strip_len = strip_end - strip_start
+            # Iteration counter
+            i = 0;
+            # Store temporary mesh in list for cleaning later
+            tmp_mesh = []
+            for frame in range(int(strip_start), int(strip_end)):
+                # Set current frame
+                bpy.context.scene.frame_set(frame)
+                # Update scene view
+                bpy.context.scene.update()
+                # Create a copy of the mesh with modifiers applied
+                objMod = obj.to_mesh(bpy.context.scene, True, 'PREVIEW')
+                # Get isLerp flag
+                lerp = 0
+                if 'isLerp' in obj.data:
+                    lerp = obj.data['isLerp']
+                # Write VANIM struct
+                symbolName = fileName + "_model" + CleanName(obj.data.name) + "_anim_" +  CleanName(strip.name)
+                if frame == strip_start :
+                    f.write("VANIM  " + symbolName + " = {\n" + 
+                            "\t" + str(int(strip_len)) + ", // number of frames e.g   20\n" +
+                            "\t" + str(len(objMod.vertices)) + ", // number of vertices e.g 21\n" +
+                            "\t-1, // anim cursor : -1 means not playing back\n" +
+                            "\t0,  // lerp cursor\n" +
+                            "\t0,  // loop : if -1 , infinite loop, if n > 0, loop n times\n" +
+                            "\t1,  // playback direction (1 or -1)\n" +
+                            "\t0,  // ping pong animation (A>B>A)\n" +
+                            "\t" + str(lerp) + ", // use lerp to interpolate keyframes\n" +
+                            "\t{   // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n"
+                            )
+                # Get vertices coordinates as VECTORs
+                for vertIndex in range(len(objMod.vertices)):
+                    # Readability : if first vertex of the frame, write frame number as a comment
+                    if vertIndex == 0:
+                        f.write("\t\t//Frame " + str(int(frame - strip_start)) + "\n")
+                    # Write vertex coordinates x,z,y 
+                    f.write( "\t\t{ " + str(round( objMod.vertices[ vertIndex ].co.x * scale) ) + 
+                                  "," + str(round(-objMod.vertices[ vertIndex ].co.z * scale) ) +
+                                  "," + str(round( objMod.vertices[ vertIndex ].co.y * scale) ) + 
+                            " }" )
+                    # If vertex is not the last in the list, write a comma 
+                    if i != ( len(objMod.vertices) * (strip_len) * 3 ) - 3:
+                        f.write(",\n")
+                    # Readability : If vertex is the last in frame, insert a blank line 
+                    if vertIndex == len(objMod.vertices) - 1:
+                        f.write("\n")
+                    # Increment counter
+                    i += 3;
+                # Add temporary mesh to the cleaning list
+                tmp_mesh.append( objMod )
+            # Close anim declaration
+            f.write("\t}\n};\n\n")
+            # Remove temporary meshes
+            for o in tmp_mesh:
+                bpy.data.meshes.remove( o )
+            return str( "VANIM " + symbolName )
 
     ### Sound utilities
         class Sound:
@@ -779,6 +894,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         # Partial declaration of structures to avoid inter-dependencies issues
         h.write("struct BODY;\n" +
                 "struct VANIM;\n" +
+                "struct MESH_ANIMS_TRACKS;\n" +
                 "struct PRIM;\n" +
                 "struct MESH;\n" +
                 "struct CAMPOS;\n" +
@@ -813,13 +929,19 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         h.write("typedef struct VANIM { \n" +
                 "\tint nframes;    // number of frames e.g   20\n" +
                 "\tint nvert;      // number of vertices e.g 21\n" +
-                "\tint cursor;     // anim cursor\n" +
+                "\tint cursor;     // anim cursor : -1 == not playing, n>=0 == current frame number\n" +
                 "\tint lerpCursor; // anim cursor\n" +
+                "\tint loop;       // loop anim : -1 == infinite, n>0  == play n times\n" + 
                 "\tint dir;        // playback direction (1 or -1)\n" +
+                "\tint pingpong;   // ping pong animation (A>B>A)\n" +
                 "\tint interpolate; // use lerp to interpolate keyframes\n" +
                 "\tSVECTOR data[]; // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n" +
-                # ~ "\tSVECTOR normals[]; // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n" +
                 "\t} VANIM;\n\n")
+        
+        h.write("typedef struct MESH_ANIMS_TRACKS {\n" + 
+                "\tu_short index;\n" +
+                "\tVANIM * strips[];\n" +
+                "} MESH_ANIMS_TRACKS;\n\n" )
         # PRIM
         h.write("typedef struct PRIM {\n" +
                 "\tVECTOR order;\n" +
@@ -849,7 +971,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tlong        p;\n" + 
                 "\tlong        OTz;\n" + 
                 "\tBODY     *  body;\n" + 
-                "\tVANIM    *  anim;\n" + 
+                "\tMESH_ANIMS_TRACKS    *  anim_tracks;\n" +
+                "\tVANIM *     currentAnim;\n" + 
                 "\tstruct NODE   *    node;\n" + 
                 "\tVECTOR      pos2D;\n" + 
                 "\t} MESH;\n\n")
@@ -1007,6 +1130,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         lmpObjects = {}
         # Meshes
         mshObjects = {}
+        # Vertex animation
+        # ~ mixOverlapingStrips = True
+        objAnims = defaultdict(dict)
+        # Use scene's Start/End frames as default
+        frame_start = int( bpy.context.scene.frame_start )
+        frame_end = int( bpy.context.scene.frame_end )
+        # Loop
         for obj in bpy.data.objects:
             # Build a dictionary of objects that have child SPEAKER objects
             if obj.type == 'SPEAKER':
@@ -1015,15 +1145,8 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     if obj.parent is not None:
                         if obj.parent.type == 'MESH':
                             parent = obj.parent
-                            # if parent exists in parent list, append to child list
-                            # ~ if obj.parent.name in spkrParents:
-                                # ~ spkrParents[obj.parent.name].append(obj.name)
-                            # ~ else:
-                                # if parent does not exist in list yet, create array
-                                # ~ spkrParents[obj.parent.name] = [obj.name]
                     # has no parent
                     else:
-                        # ~ spkrOrphans.append(obj.name)
                         parent = 0
                     # get sound informations
                     objName = obj.name
@@ -1053,12 +1176,59 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     else:
                         convertedSoundPath = sound2VAG(soundPath, soundName)
                         soundFiles.append( Sound( objName, soundName, soundPath, convertedSoundPath, parent, location, volume, volume_min, volume_max, -1 ) )
-                # Build dict of LAMPs objects
-                # We want to be able to find an object based on it's data name.
+            # Build dict of objects <> data correspondance
+            # We want to be able to find an object based on it's data name.
             if obj.type == 'LAMP':
                 lmpObjects[obj.data.name] = obj.name
             if obj.type == 'MESH':
                 mshObjects[obj.data.name] = obj.name
+                ## Vertex Animation
+                # If isAnim flag is set, export object's vertex animations
+                # Vertex animation is possible using keyframes or shape keys
+                # Using nla tracks allows to export several animation for the same mesh
+                # If the mixAnim flag is set, the resulting animation will be an interpolation between the overlapping nla tracks.
+                #if len(bpy.data.actions):
+                # Find shape key based animations
+                if obj.active_shape_key:
+                    # Get shape key name
+                    shapeKeyName = obj.active_shape_key.id_data.name
+                    # Get shape_key object
+                    shapeKey = bpy.data.shape_keys[shapeKeyName]
+                    # Bake action to LNA
+                    if bakeActionToNLA(shapeKey):
+                        getTrackList(shapeKey, obj)
+                # Find object based animation
+                if bakeActionToNLA(obj):
+                    getTrackList(obj, obj)
+        ## Export anim tracks and strips
+        for obj in objAnims:
+            # If mixing nla tracks, only export one track
+            if self.exp_mixOverlapingStrips:
+                overlappingStrips = findOverlappingTrack(objAnims[obj])
+                level_symbols.append( writeMESH_ANIMS( f, obj, overlappingStrips, fileName ) )
+                for strip in overlappingStrips:
+                    # Min frame start
+                    strip_start = min( strip.frame_start , min([ action.frame_start for action in overlappingStrips[strip] ]) )
+                    # Max frame end
+                    strip_end = max( strip.frame_start , max([ action.frame_end for action in overlappingStrips[strip] ]) )
+                    level_symbols.append( writeVANIM(f, obj, strip, fileName, strip_start, strip_end) )
+            else:
+                allStrips = getStripsTotal(objAnims[obj])
+                level_symbols.append( writeMESH_ANIMS( f, obj, allStrips, fileName ) )
+                for track in objAnims[obj]:
+                    # if flag is set, hide others nla_tracks
+                    track.is_solo = True
+                    for strip in objAnims[obj][track]:
+                        # Use scene's Start/End frames as default
+                        strip_start = strip.frame_start
+                        strip_end = strip.frame_end
+                        level_symbols.append( writeVANIM(f, obj, strip, fileName, strip_start, strip_end) )
+                    track.is_solo = False
+            # Close struct declaration
+            # ~ f.write("\t\t},\n")
+            # ~ f.write("\t}\n};\n")
+            # ~ level_symbols.append( "MESH_ANIMS_TRACKS " + fileName + "_model" +  CleanName(obj.data.name) + "_anims" )
+    
     ## Camera setup
         # List of points defining the camera path
         camPathPoints = []
@@ -1315,8 +1485,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                     'isBG':0,
                     'isSprite':0,
                     'mass': 10,
-                    'restitution': 0,
-                    'lerp': 0
+                    'restitution': 0
                 }
                 # Get real values from object
                 for prop in chkProp:
@@ -1334,70 +1503,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 if chkProp['mass'] == 0:
                     chkProp['mass'] = 1
                         
-        ## Vertex animation
-                # write vertex anim if isAnim != 0 
-                # Source : https://stackoverflow.com/questions/9138637/vertex-animation-exporter-for-blender
-                if m.get("isAnim") is not None and m["isAnim"] != 0:
-                    # Write vertex pos
-                    # ~ o = bpy.data.objects[m.name]
-                    # Find object from mesh
-                    o = bpy.data.objects[mshObjects[m.name]]
-                    # If has actions, create animation_data, nla_track and convert action to strip
-                    # Get object's key name 
-                    # shapeKeyName = bpy.data.objects['Cube'].active_shape_key.id_data.name
-                    # shapeKey     = bpy.data.shape_keys[shapeKeyName]
-                    # Get action name
-                    # bpy.data.shape_keys['Key.001'].animation_data.action.name
-                    # Get nla_tracks
-                    # nlaTrackName = shapeKey.animation_data.nla_tracks[0].name
-                    # Get strips on nlaTrack
-                    # strip = shapeKey.animation_data.nla_tracks[nlaTrackName].strips[0]
-                    # get strip start and end
-                    # strip.frame_start # strip.frame_end
-                    # for strip in strips:
-                        # print(str(strip.frame_start) + " - " + str(strip.frame_end))
-                    #
-                    # If an action exists with the same name as the object, use that
-                    if m.name in bpy.data.actions:
-                        frame_start = int(bpy.data.actions[m.name].frame_range[0])
-                        frame_end = int(bpy.data.actions[m.name].frame_range[1])
-                    else:
-                        # Use scene's Start/End frames
-                        frame_start = int( bpy.context.scene.frame_start )
-                        frame_end = int( bpy.context.scene.frame_end )
-                    nFrame = frame_end - frame_start
-                    c = 0;
-                    tmp_meshes = []
-                    for i in range(frame_start, frame_end):
-                        bpy.context.scene.frame_set(i)
-                        bpy.context.scene.update()
-                        nm = o.to_mesh(bpy.context.scene, True, 'PREVIEW')
-                        if i == frame_start :
-                            f.write("VANIM " + fileName + "_model"+cleanName+"_anim = {\n" +
-                                    "\t" + str(nFrame) + ",\n" +
-                                    "\t" + str(len(nm.vertices)) + ",\n" + 
-                                    "\t0,\n" + 
-                                    "\t0,\n" + 
-                                    "\t1,\n" + 
-                                    "\t" + str(chkProp['lerp']) + ",\n" + 
-                                    "\t{\n"
-                                    )
-                            level_symbols.append( "VANIM " + fileName + "_model"+cleanName+"_anim" )
-                        for v in range(len(nm.vertices)):
-                            if v == 0:
-                                f.write("\t\t//Frame %d\n" % i)
-                            f.write("\t\t{ " + str(round(nm.vertices[v].co.x*scale)) + "," + str(round(-nm.vertices[v].co.z*scale)) + "," + str(round(nm.vertices[v].co.y*scale)) + " }")
-                            if c != len(nm.vertices) * (nFrame) * 3 - 3:
-                                f.write(",\n")
-                            if v == len(nm.vertices) - 1:
-                                f.write("\n")
-                            c += 3;
-                        tmp_meshes.append(nm)
-                    f.write("\n\t}\n};\n")
-                    # Remove meshe's working copies
-                    for nm in tmp_meshes:
-                        bpy.data.meshes.remove(nm)
-                # bpy.data.objects[bpy.data.meshes[0].name].active_shape_key.value : access shape_key
         ## Mesh world transform setup
                 # Write object matrix, rot and pos vectors
                 f.write(
@@ -1480,7 +1585,6 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                                 level_symbols.append( "unsigned long " + "_binary_TIM_" + prefix + "_tim_length" )
                                 level_symbols.append( "TIM_IMAGE " + fileName + "_tim_" + prefix )
                                 timList.append(prefix)
-                # ~ f.write("NODE_DECLARATION\n")
                 f.write( "MESH " + fileName + "_mesh" + cleanName + " = {\n" +
                          "\t" + str(totalVerts) + ",\n" +
                          "\t&" + fileName + "_model"+ cleanName +",\n" +
@@ -1500,6 +1604,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 else:
                     f.write("\t0,\n" +
                             "\t0,\n")     
+                # Find out if object as animations
+                symbol_name = "MESH_ANIMS_TRACKS " + fileName + "_model" +  CleanName(obj.data.name) + "_anims"
+                if symbol_name in level_symbols:
+                    symbol_name = "&" + fileName + "_model" +  CleanName(obj.data.name) + "_anims"
+                else:
+                    symbol_name = "0"
                 f.write(
                         "\t{0}, // Matrix\n" +
                         "\t{" + str(round(bpy.data.objects[mshObjects[m.name]].location.x * scale)) + "," 
@@ -1518,16 +1628,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                         "\t" + str(int(chkProp['isLevel'])) + ", // isLevel\n" +
                         "\t" + str(int(chkProp['isWall'])) + ", // isWall\n" +
                         "\t" + str(int(chkProp['isBG'])) + ", // isBG\n" +
-                        "\t" + str(int(chkProp['isSprite'])) + ",// isSprite\n" +
+                        "\t" + str(int(chkProp['isSprite'])) + ", // isSprite\n" +
                         "\t0, // p\n" +
                         "\t0, // otz\n" + 
-                        "\t&" + fileName + "_model"+cleanName+"_body,\n"
-                        )
-                if m.get("isAnim") is not None and m["isAnim"] != 0:
-                        f.write("\t&" + fileName + "_model"+cleanName+"_anim, // Animation data\n")
-                else:
-                        f.write("\t0, // No animation data\n")
-                f.write(
+                        "\t&" + fileName + "_model" + cleanName + "_body,\n" +
+                        "\t" + symbol_name + ", // Mesh anim tracks\n" +
+                        "\t0, // Current VANIM\n" +
                         "\t" + "subs_" + CleanName(m.name) + ",\n" +
                         "\t0 // Screen space coordinates\n" +
                         "};\n\n"
@@ -1973,7 +2079,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             # Deal with VAGs
             VAGBank = writeVAGbank(f, soundFiles, level_symbols)
             if VAGBank and VAGBank != "0":
-                VAGBank = fileName + "_VAGBank"
+                VAGBank = "&" + fileName + "_VAGBank"
             # Deal with XA
             XAlist = writeXAbank(f, soundFiles, level_symbols)
             writeXAfiles(f, XAlist, fileName)
@@ -1984,10 +2090,13 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 configFile = expFolder + os.sep + os.path.relpath(self.exp_isoCfg)
                 addXAtoISO(XAlist, configFile)
                 XAFiles = len(XAlist)
+            if XAFiles and XAFiles != "0":
+                XAFiles = "&" + fileName + "_XAFiles"
             # Write Sound obj 
             level_sounds = writeSoundObj(f, soundFiles, level_symbols)
             if level_sounds and level_sounds != "0":
-                level_sounds = fileName + "_sounds"
+                level_sounds = "&" + fileName + "_sounds"
+                
         # Write LEVEL struct
         f.write(
             "LEVEL " + fileName + " = {\n" +
@@ -2004,9 +2113,9 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             "\t&" + fileName + "_camPath,\n" +
             "\t(CAMANGLE **)&" + fileName + "_camAngles,\n" +
             "\t&" + fileName + "_node" + CleanName(nodePtr) + ",\n" +
-            "\t&" + level_sounds + ",\n" +
-            "\t&" + VAGBank + ",\n" +
-            "\t&" + fileName + "_XAFiles\n" +
+            "\t" + level_sounds + ",\n" +
+            "\t" + VAGBank + ",\n" +
+            "\t" + XAFiles + "\n" +
             "};\n\n")
         # Set default camera back in Blender
         if defaultCam != 'NULL':
