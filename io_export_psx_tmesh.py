@@ -61,7 +61,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
     exp_convTexToPNG = BoolProperty(
         name = "Convert images to PNG",
         description = "Use installed Image Magick's convert tool to convert images to PNG.",
-        default = False
+        default = True
     )
     exp_TIMbpp = BoolProperty(
         name = "Use 4bpp TIMs",
@@ -94,6 +94,11 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
         name="mkpsxiso config folder",
         description = "Where should we look for mkpsxiso's config file ?",
         default= "." + os.sep + "config" + os.sep + "3dcam.xml"
+    )
+    exp_CompressAnims = BoolProperty(
+        name="Compress animation data",
+        description="Use Delta/RLE compression on animations 's data.",
+        default=False,
     )
     exp_mixOverlapingStrips = BoolProperty(
         name="Mix overlaping nla animation tracks",
@@ -463,15 +468,16 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
             f.write("\t}\n};\n\n")
             return str( "MESH_ANIMS_TRACKS " + symbolName )
 
-        def writeVANIM(f, obj, strip, fileName, strip_start, strip_end):
+        def writeVANIM(f, obj, strip, fileName, strip_start, strip_end, compress=False):
             # write the VANIM portion of a MESH_ANIMS struct declaration
             # Get strip total length
-            print(strip.name)
+            # ~ print(strip.name)
             strip_len = strip_end - strip_start
             # Iteration counter
             i = 0;
             # Store temporary mesh in list for cleaning later
             tmp_mesh = []
+            frameList = []
             for frame in range(int(strip_start), int(strip_end)):
                 # Set current frame
                 bpy.context.scene.frame_set(frame)
@@ -495,17 +501,35 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                             "\t1,  // playback direction (1 or -1)\n" +
                             "\t0,  // ping pong animation (A>B>A)\n" +
                             "\t" + str(lerp) + ", // use lerp to interpolate keyframes\n" +
-                            "\t{   // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n"
+                            "\t{   // vertex pos as BVECTORs e.g 20 * 21 BVECTORS\n"
                             )
-                # Get vertices coordinates as VECTORs
-                for vertIndex in range(len(objMod.vertices)):
+                # Add an empty list to the frame list
+                frameList.append([])
+                currentFrameNbr = int(frame - strip_start)
+                currentFrameItem = frameList[currentFrameNbr]
+                if currentFrameNbr > 0:
+                    previousFrameItem = frameList[currentFrameNbr - 1]
+                else:
+                    # If first iteration, use currentFrameItem
+                    previousFrameItem = currentFrameItem
+                # Get vertices coordinates as a VECTORs
+                for vertIndex in range(len(objMod.vertices)):                 
+                    # Store current vertex coords
+                    currentVertex = Vector( ( round( objMod.vertices[ vertIndex ].co.x * scale), round( -objMod.vertices[ vertIndex ].co.z * scale), round( objMod.vertices[ vertIndex ].co.y * scale) ) )
+                    # Add current vertex to current frame item
+                    currentFrameItem.append(currentVertex)
+                    # If compressing anim
+                    if self.exp_CompressAnims:
+                        # Find delta between current frame and previous frame
+                        delta = currentFrameItem[vertIndex] - previousFrameItem[vertIndex]
+                        currentVertex = delta
                     # Readability : if first vertex of the frame, write frame number as a comment
                     if vertIndex == 0:
-                        f.write("\t\t//Frame " + str(int(frame - strip_start)) + "\n")
+                        f.write("\t\t//Frame " + str(currentFrameNbr) + "\n")
                     # Write vertex coordinates x,z,y 
-                    f.write( "\t\t{ " + str(round( objMod.vertices[ vertIndex ].co.x * scale) ) + 
-                                  "," + str(round(-objMod.vertices[ vertIndex ].co.z * scale) ) +
-                                  "," + str(round( objMod.vertices[ vertIndex ].co.y * scale) ) + 
+                    f.write( "\t\t{ " + str(int(currentVertex.x)) + 
+                                  "," + str(int(currentVertex.y)) +
+                                  "," + str(int(currentVertex.z)) + 
                             " }" )
                     # If vertex is not the last in the list, write a comma 
                     if i != ( len(objMod.vertices) * (strip_len) * 3 ) - 3:
@@ -519,6 +543,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 tmp_mesh.append( objMod )
             # Close anim declaration
             f.write("\t}\n};\n\n")
+            # ~ print(frameList)
             # Remove temporary meshes
             for o in tmp_mesh:
                 bpy.data.meshes.remove( o )
@@ -889,10 +914,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "#pragma once\n" + 
                 "#include <sys/types.h>\n" + 
                 "#include <libgte.h>\n" + 
+                "#include <stdint.h>\n" + 
                 "#include <libgpu.h>\n\n" 
                 )
         # Partial declaration of structures to avoid inter-dependencies issues
         h.write("struct BODY;\n" +
+                "struct BVECTOR;\n" +
                 "struct VANIM;\n" +
                 "struct MESH_ANIMS_TRACKS;\n" +
                 "struct PRIM;\n" +
@@ -913,7 +940,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "struct SOUND_OBJECT;\n" +
                 "struct LEVEL_SOUNDS;\n" +
                 "\n")
-        # BODY
+        # BODY                
         h.write("typedef struct BODY {\n" +
                 "\tVECTOR  gForce;\n" +
                 "\tVECTOR  position;\n" +
@@ -926,6 +953,12 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 # ~ "\tstruct NODE * curNode; \n" +
                 "\t} BODY;\n\n")
         # VANIM
+        h.write("typedef struct BVECTOR {\n" +
+                "\tint8_t	vx, vy;\n" +
+                "\tint8_t	vz;\n" +
+                "\t// int8_t factor; // could be useful for anims where delta is > 256 \n" +
+                "} BVECTOR;\n\n")
+        
         h.write("typedef struct VANIM { \n" +
                 "\tint nframes;    // number of frames e.g   20\n" +
                 "\tint nvert;      // number of vertices e.g 21\n" +
@@ -935,7 +968,7 @@ class ExportMyFormat(bpy.types.Operator, ExportHelper):
                 "\tint dir;        // playback direction (1 or -1)\n" +
                 "\tint pingpong;   // ping pong animation (A>B>A)\n" +
                 "\tint interpolate; // use lerp to interpolate keyframes\n" +
-                "\tSVECTOR data[]; // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n" +
+                "\tBVECTOR data[]; // vertex pos as SVECTORs e.g 20 * 21 SVECTORS\n" +
                 "\t} VANIM;\n\n")
         
         h.write("typedef struct MESH_ANIMS_TRACKS {\n" + 
